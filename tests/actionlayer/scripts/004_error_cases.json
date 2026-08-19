@@ -1,0 +1,7 @@
+{
+    "actions": [
+        {"op": "basePoint", "name": "A", "x": 0.0, "y": 0.0, "draftBlock": "Front"},
+        {"op": "basePoint", "name": "A2", "x": 5.0, "y": 5.0, "draftBlock": "Front"},
+        {"op": "line", "firstPoint": "A", "secondPoint": "NoSuchPoint"}
+    ]
+}

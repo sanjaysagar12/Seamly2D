@@ -45,6 +45,8 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("pattern.listTools"));        // This op itself, so callers can discover it via introspection too.
     tools.append(QStringLiteral("render.snapshot"));          // Scene-to-image rendering, implemented in render_handlers.cpp.
     tools.append(QStringLiteral("pattern.resolveName"));      // Phase 4: name -> id/type resolution, implemented in pattern_resolve_name_handler.cpp.
+    tools.append(QStringLiteral("basePoint"));                 // Phase 5: mutating base-point/draft-block creation, implemented in point_handlers.cpp.
+    tools.append(QStringLiteral("line"));                       // Phase 5: mutating line creation, implemented in line_handlers.cpp.
 
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.

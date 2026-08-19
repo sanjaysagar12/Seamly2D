@@ -29,6 +29,8 @@
 #include "handlers/pattern_list_tools_handler.h"   // Brings in handleListTools(), registered under "pattern.listTools".
 #include "handlers/render_handlers.h"              // Brings in handleRenderSnapshot(), registered under "render.snapshot".
 #include "handlers/pattern_resolve_name_handler.h" // Brings in handlePatternResolveName(), registered under "pattern.resolveName".
+#include "handlers/point_handlers.h"                // Brings in handleBasePoint(), registered under "basePoint".
+#include "handlers/line_handlers.h"                 // Brings in handleLine(), registered under "line".
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -46,6 +48,8 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("pattern.listTools"), &handleListTools);                  // Static op-name capability listing.
     registerAction(QStringLiteral("render.snapshot"), &handleRenderSnapshot);               // Scene-to-image rendering.
     registerAction(QStringLiteral("pattern.resolveName"), &handlePatternResolveName);       // Phase 4: name -> id/type resolution diagnostic.
+    registerAction(QStringLiteral("basePoint"), &handleBasePoint);                          // Phase 5: mutating -- creates a new draft block's anchor point.
+    registerAction(QStringLiteral("line"), &handleLine);                                    // Phase 5: mutating -- connects two named points with a line.
 }
 
 // Stores the handler function in the internal map under the given name.

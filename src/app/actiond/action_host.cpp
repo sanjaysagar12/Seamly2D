@@ -31,6 +31,7 @@
 #include "../../libs/vformat/measurements.h"         // Brings in MeasurementDoc, used to load and parse the measurement file.
 #include "../../libs/vpatterndb/vcontainer.h"        // Brings in VContainer, the data container the pattern and measurements populate.
 #include "../../libs/vwidgets/vmaingraphicsscene.h"  // Brings in VMainGraphicsScene, required (non-null) by VPattern::Parse().
+#include "../../libs/vwidgets/vmaingraphicsview.h"   // Brings in VMainGraphicsView; see the qApp->setSceneView() comment below for why one is needed.
 #include "../../libs/vmisc/vabstractapplication.h"   // Brings in the qApp accessors used to mirror MainWindow::LoadPattern()'s setup.
 
 #include "../../libs/actionlayer/action_context.h"  // Brings in ActionContext, bundling scene/doc/data for the engine.
@@ -57,7 +58,7 @@ namespace
 namespace ActionHost
 {
     QJsonDocument runActions(const QString &patternFilePath, const QString &measurementsFilePath,
-                              const QJsonDocument &actionsScript)
+                              const QJsonDocument &actionsScript, const QString &savePatternFilePath)
     {
         requireFileExists(patternFilePath, QStringLiteral("Pattern"));           // Fail fast with a clear message rather than a parser error.
         requireFileExists(measurementsFilePath, QStringLiteral("Measurements")); // Fail fast with a clear message rather than a parser error.
@@ -73,6 +74,22 @@ namespace ActionHost
         // required, not optional, even though actiond never renders anything to a window.
         VMainGraphicsScene draftScene; // Draft-mode scene: base points, lines, curves, etc.
         VMainGraphicsScene pieceScene; // Piece-mode scene: cut pieces built from the draft.
+
+        // Phase 5: several reused undo-command redo() paths (e.g. AddToCalc::redo(), which every
+        // mutating draw-tool's AddToFile() goes through) unconditionally call
+        // VMainGraphicsView::NewSceneRect(qApp->getCurrentScene(), qApp->getSceneView()) at the
+        // end -- not gated behind any "is there a GUI" check, because in the real app there always
+        // is one. Both accessors return nullptr until something calls the matching setter, and
+        // NewSceneRect() dereferences the view unconditionally (its SCASSERT(view != nullptr) is a
+        // release-build no-op), so the first mutating action's redo() null-derefs and crashes the
+        // process. MainWindow wires these up from ui->view/currentScene in its own constructor;
+        // this mirrors that same wiring with an offscreen (QT_QPA_PLATFORM=offscreen, see main.cpp)
+        // VMainGraphicsView that is never shown, so the same reused code paths that need *some*
+        // view to exist still behave, without actiond needing a real display.
+        VMainGraphicsView sceneView; // Never shown; exists only so qApp->getSceneView() is non-null.
+        QGraphicsScene *currentScene = &draftScene; // setCurrentScene() takes QGraphicsScene** so qApp always sees the latest value, matching MainWindow's own pattern.
+        qApp->setCurrentScene(&currentScene);
+        qApp->setSceneView(&sceneView);
 
         // QScopedPointer gives doc RAII cleanup on every return path (including the exceptions
         // thrown by setXMLContent()/Parse() below) without a manual try/catch-and-delete.
@@ -100,9 +117,24 @@ namespace ActionHost
         doc->Parse(Document::FullParse);
 
         ActionContext ctx(&draftScene, doc.data(), &data); // Bundles the trio ActionEngine's handlers read from.
-        ActionRegistry registry;                            // Auto-registers Phase 1's read-only handlers (pattern.dump, etc.).
+        ActionRegistry registry;                            // Auto-registers every built-in handler (read-only and, since Phase 5, mutating).
         ActionEngine engine(registry);                       // Dispatches the script below through that registry.
 
-        return engine.run(actionsScript, ctx); // Runs every action in the script; returns {"results": [...]}.
+        const QJsonDocument result = engine.run(actionsScript, ctx); // Runs every action in the script; {"results": [...]}.
+
+        // Phase 5: persist whatever "basePoint"/"line"/etc. actions mutated, if the caller asked
+        // for that. This runs regardless of individual actions' ok/failure -- a partially-applied
+        // batch is still real DOM state worth inspecting -- and after engine.run() rather than
+        // per-action, so one save reflects the whole script's cumulative effect.
+        if (!savePatternFilePath.isEmpty())
+        {
+            QString saveError; // SaveDocument() reports failure via this out-parameter, not an exception.
+            if (!doc->SaveDocument(savePatternFilePath, saveError))
+            {
+                throw VException(QStringLiteral("Failed to save pattern to %1: %2").arg(savePatternFilePath, saveError));
+            }
+        }
+
+        return result; // {"results": [...]}, one entry per input action, independent of whether the save above ran.
     }
 }

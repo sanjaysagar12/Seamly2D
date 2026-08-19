@@ -37,8 +37,14 @@ namespace ActionHost
     // MainWindow::LoadPattern() would, runs actionsScript through ActionEngine, and returns its
     // result document. Throws VException (or a subclass) -- the same exception type every reused
     // Seamly2D loading call already throws -- on any load or parse failure; callers must catch it.
+    //
+    // savePatternFilePath is optional (Phase 5): when non-empty, the pattern document -- as
+    // mutated by any "basePoint"/"line"/etc. actions in the script -- is written to that path via
+    // VPattern::SaveDocument() after the script finishes running, so a caller can inspect the
+    // resulting .val file. Left empty, no save happens, matching every earlier (read-only) phase's
+    // behavior exactly.
     QJsonDocument runActions(const QString &patternFilePath, const QString &measurementsFilePath,
-                              const QJsonDocument &actionsScript);
+                              const QJsonDocument &actionsScript, const QString &savePatternFilePath = QString());
 }
 
 #endif // ACTION_HOST_H // End of include guard started above.

@@ -27,7 +27,8 @@
 #include "../../libs/vmisc/vsettings.h"      // Brings in VSettings, constructed in openSettings() below.
 #include "../../libs/vmisc/projectversion.h" // Brings in VER_INTERNALNAME_2D_STR / VER_COMPANYNAME_STR for app identity.
 
-#include <QSettings> // Provides QSettings, used to locate the per-user ini file path below.
+#include <QSettings>   // Provides QSettings, used to locate the per-user ini file path below.
+#include <QUndoStack>  // Provides QUndoStack, constructed below so qApp->getUndoStack() is safe to use.
 
 // Constructs the base VApplication, names it, then opens settings so qApp->Settings() is valid
 // before any caller (main.cpp) proceeds to construct a VAbstractPattern.
@@ -37,6 +38,14 @@ ActiondApplication::ActiondApplication(int &argc, char **argv)
     setApplicationName(VER_INTERNALNAME_2D_STR); // Matches seamly2d's own identity, so settings files are compatible/shared.
     setOrganizationName(VER_COMPANYNAME_STR);    // Matches seamly2d's own identity, so settings files are compatible/shared.
     openSettings();                              // Populate m_settings before any VAbstractPattern subclass is constructed.
+
+    // VAbstractApplication::undoStack (protected) is nullptr until a subclass sets it -- Phase 1-4
+    // never needed it, since every action was read-only. Phase 5's mutating tools (VToolBasePoint,
+    // VToolLine, ...) call qApp->getUndoStack()->push(...) unconditionally from AddToFile(), the
+    // same way the interactive GUI's Source::FromGui creation path always has; Application2D
+    // (application_2d.cpp) makes this same "undoStack = new QUndoStack(this)" call for exactly
+    // that reason. Without it, the very first mutating action null-derefs and crashes the process.
+    undoStack = new QUndoStack(this);
 }
 
 // Returns the real VTranslateVars instance formula evaluation needs during pattern parsing.

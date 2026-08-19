@@ -80,9 +80,14 @@ int main(int argc, char *argv[])
     const QCommandLineOption patternOption(QStringLiteral("pattern"), QStringLiteral("Pattern file (.val)."), QStringLiteral("path"));
     const QCommandLineOption measurementsOption(QStringLiteral("measurements"), QStringLiteral("Measurements file (.smis/.smms/.vst)."), QStringLiteral("path"));
     const QCommandLineOption actionsOption(QStringLiteral("actions"), QStringLiteral("Actions JSON file."), QStringLiteral("path"));
+    // Phase 5, optional: where to write the pattern document after the script runs, so a mutating
+    // script's effect (basePoint/line/...) can be inspected on disk. Omitted entirely for a
+    // read-only script, exactly matching every earlier phase's behavior.
+    const QCommandLineOption savePatternOption(QStringLiteral("save-pattern"), QStringLiteral("Write the (possibly mutated) pattern here after running the script."), QStringLiteral("path"));
     parser.addOption(patternOption);      // Registers --pattern <path> with the parser.
     parser.addOption(measurementsOption); // Registers --measurements <path> with the parser.
     parser.addOption(actionsOption);      // Registers --actions <path> with the parser.
+    parser.addOption(savePatternOption);  // Registers --save-pattern <path> with the parser.
     parser.process(app);                  // Parses argv; also handles --help/--version and unknown-option errors itself.
 
     // All three are required: fail fast with a usage message rather than proceeding with a null path.
@@ -96,6 +101,7 @@ int main(int argc, char *argv[])
     const QString patternPath = parser.value(patternOption);           // Validated present above; value() is safe to call now.
     const QString measurementsPath = parser.value(measurementsOption); // Validated present above; value() is safe to call now.
     const QString actionsPath = parser.value(actionsOption);           // Validated present above; value() is safe to call now.
+    const QString savePatternPath = parser.value(savePatternOption);   // Empty string ("") if --save-pattern was not given; runActions() treats that as "don't save".
 
     try
     {
@@ -115,7 +121,8 @@ int main(int argc, char *argv[])
         }
 
         // The actual work: load the pattern + measurements, run the script, get the result back.
-        const QJsonDocument result = ActionHost::runActions(patternPath, measurementsPath, actionsScript);
+        // savePatternPath is empty unless --save-pattern was given; runActions() no-ops the save step in that case.
+        const QJsonDocument result = ActionHost::runActions(patternPath, measurementsPath, actionsScript, savePatternPath);
 
         // Success: the ActionEngine result, printed as a single compact JSON line on stdout.
         QTextStream(stdout) << QString::fromUtf8(result.toJson(QJsonDocument::Compact)) << Qt::endl;
