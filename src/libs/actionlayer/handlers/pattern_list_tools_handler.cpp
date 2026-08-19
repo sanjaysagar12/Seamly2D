@@ -53,6 +53,9 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("bisector"));                   // Phase 6: mutating formula bisector-point creation, implemented in formula_point_handlers.cpp.
     tools.append(QStringLiteral("shoulderPoint"));               // Phase 6: mutating formula shoulder-point creation, implemented in formula_point_handlers.cpp.
     tools.append(QStringLiteral("lineIntersect"));               // Phase 6: mutating line/line intersection point creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("measurements.load"));           // Phase 7: mutating measurement-file swap (no recompute), implemented in measurements_sync_handlers.cpp.
+    tools.append(QStringLiteral("measurements.recompute"));      // Phase 7: mutating formula/geometry recompute, implemented in measurements_sync_handlers.cpp.
+    tools.append(QStringLiteral("measurements.sync"));           // Phase 7: mutating measurements.load + measurements.recompute in one action, implemented in measurements_sync_handlers.cpp.
 
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.

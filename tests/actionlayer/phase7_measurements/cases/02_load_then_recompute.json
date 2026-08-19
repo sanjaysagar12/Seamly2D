@@ -1,0 +1,8 @@
+{
+  "_comment": "Proves measurements.recompute picks up a measurement change measurements.load alone did not apply. Same measurements_b.smis (shoulder_length=20cm) as case 01, but this batch adds a separate measurements.recompute action before dumping. Checked by run_tests.sh's check_02 function: pattern.dump's A1.x must now equal 755.9055118110236 (ToPixel(200mm, Mm)), the geometry that shoulder_length=20cm actually produces -- proving the daemon really re-evaluated the formula, not just accepted the new measurement value into VContainer.",
+  "actions": [
+    { "op": "measurements.load", "path": "fixtures/measurements_b.smis" },
+    { "op": "measurements.recompute" },
+    { "op": "pattern.dump" }
+  ]
+}

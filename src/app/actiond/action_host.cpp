@@ -117,7 +117,15 @@ namespace ActionHost
         MeasurementDoc measurements(&data);
         measurements.setSize(VContainer::rsize());        // Matches MainWindow::LoadPattern()'s setup for gradation-aware formulas.
         measurements.setHeight(VContainer::rheight());     // Matches MainWindow::LoadPattern()'s setup for gradation-aware formulas.
-        measurements.setXMLContent(measurementsFilePath); // Loads the measurement file's XML into its own DOM tree.
+        measurements.setXMLContent(measurementsFilePath); // Loads the measurement file's XML into its own DOM tree; also sets measurements.Type() via ReadType().
+        // Phase 7: mirrors MainWindow::loadMeasurements()'s qApp->setPatternType(m_measurements->Type())
+        // call (mainwindow.cpp). Without this, qApp->patternType() stays MeasurementsType::Unknown
+        // for the whole process (its constructor default -- vabstractapplication.cpp), which would
+        // make measurements_sync_handlers.cpp's "measurements.load" type-consistency guard
+        // (mirroring MainWindow::updateMeasurements()'s own qApp->patternType() != Type() check)
+        // reject every legitimate load, since Unknown can never equal a real file's Individual or
+        // Multisize type.
+        qApp->setPatternType(measurements.Type());
         measurements.readMeasurements();                   // Parses that XML into real measurement variables inside data.
 
         // The real, full parse: walks the pattern XML and builds every geometry object and the

@@ -1,0 +1,10 @@
+{
+  "_comment": "Full 'give action, verify, give next action' loop shape within one process lifetime: load set A (matches what base_pattern.val was already baked with, so this is an identity load -- dump #1 should equal base_pattern.val's own baked geometry) -> dump -> load set B + recompute -> dump #2 (must now match case 02/03's recomputed geometry). Checked by run_tests.sh's check_04 function: dump #1's A1.x == 491.3385826771654 (set A / 13cm), dump #2's A1.x == 755.9055118110236 (set B / 20cm) -- both real state transitions inside the same actiond invocation, not two separate processes.",
+  "actions": [
+    { "op": "measurements.load", "path": "fixtures/measurements_a.smis" },
+    { "op": "pattern.dump" },
+    { "op": "measurements.load", "path": "fixtures/measurements_b.smis" },
+    { "op": "measurements.recompute" },
+    { "op": "pattern.dump" }
+  ]
+}

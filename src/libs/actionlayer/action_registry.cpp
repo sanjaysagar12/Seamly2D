@@ -32,6 +32,7 @@
 #include "handlers/point_handlers.h"                // Brings in handleBasePoint(), registered under "basePoint".
 #include "handlers/line_handlers.h"                 // Brings in handleLine(), registered under "line".
 #include "handlers/formula_point_handlers.h"        // Brings in the six Phase 6 handle*() functions below (endLine, alongLine, normal, bisector, shoulderPoint, lineIntersect).
+#include "handlers/measurements_sync_handlers.h"    // Brings in the three Phase 7 handle*() functions below (measurements.load, .recompute, .sync).
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -57,6 +58,9 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("bisector"), &handleBisector);                            // Phase 6: mutating -- point at formula distance along an angle bisector.
     registerAction(QStringLiteral("shoulderPoint"), &handleShoulderPoint);                  // Phase 6: mutating -- point at formula distance from a shoulder point toward a line.
     registerAction(QStringLiteral("lineIntersect"), &handleLineIntersect);                  // Phase 6: mutating -- point at the intersection of two existing lines.
+    registerAction(QStringLiteral("measurements.load"), &handleMeasurementsLoad);           // Phase 7: mutating -- swaps the active measurement file, does not recompute geometry.
+    registerAction(QStringLiteral("measurements.recompute"), &handleMeasurementsRecompute); // Phase 7: mutating -- re-evaluates every formula and rebuilds geometry.
+    registerAction(QStringLiteral("measurements.sync"), &handleMeasurementsSync);           // Phase 7: mutating -- measurements.load immediately followed by measurements.recompute.
 }
 
 // Stores the handler function in the internal map under the given name.

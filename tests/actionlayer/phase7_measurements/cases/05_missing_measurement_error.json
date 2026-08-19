@@ -1,0 +1,8 @@
+{
+  "_comment": "Proves the checkRequiredMeasurements()-equivalent check runs before any mutation. measurements_incomplete.smis omits 'shoulder_length', the one measurement base_pattern.val's A1 formula needs. Dumps both before and after the failed load so run_tests.sh's check_05 function can diff them and confirm VContainer/doc were left byte-identical -- not just that the action reported failure, but that it genuinely mutated nothing. Also asserts the failed action's error is the structured {'type':'missingMeasurements','missing':[...]} shape, naming 'shoulder_length' specifically.",
+  "actions": [
+    { "op": "pattern.dump" },
+    { "op": "measurements.load", "path": "fixtures/measurements_incomplete.smis" },
+    { "op": "pattern.dump" }
+  ]
+}

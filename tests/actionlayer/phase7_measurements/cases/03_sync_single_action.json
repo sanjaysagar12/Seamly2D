@@ -1,0 +1,7 @@
+{
+  "_comment": "Proves measurements.sync is a correct composition of load+recompute, not a divergent reimplementation. One action instead of case 02's two, same target file (measurements_b.smis, shoulder_length=20cm). Checked by run_tests.sh's check_03 function the same way as check_02: pattern.dump's A1.x must equal 755.9055118110236. run_tests.sh's self-verification step also diffs this case's output against case 02's directly (ignoring the op-name/action-count differences that are expected to differ) to confirm the two are equivalent for the fields that matter.",
+  "actions": [
+    { "op": "measurements.sync", "path": "fixtures/measurements_b.smis" },
+    { "op": "pattern.dump" }
+  ]
+}
