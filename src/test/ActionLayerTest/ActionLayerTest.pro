@@ -21,6 +21,13 @@ include(../../../common.pri)
 # Can configure it not to do that with 'no_testcase_installs'
 CONFIG += testcase no_testcase_installs
 
+# This binary constructs a real QApplication (VAbstractApplication is one), so a plain
+# TEMPLATE=app target defaults to the GUI subsystem on Windows -- which silently swallows
+# every QTest stdout/stderr write, even under shell redirection (exit code is still correct,
+# but no PASS/FAIL text is ever visible). Forces the console subsystem instead, exactly as
+# actiond.pro already does for the same reason.
+CONFIG += console
+
 # directory for executable file
 DESTDIR = bin
 
@@ -32,13 +39,15 @@ OBJECTS_DIR = obj
 
 SOURCES += \
     main.cpp \
-    tst_pattern_dump.cpp
+    tst_pattern_dump.cpp \
+    tst_render_snapshot.cpp
 
 *msvc*:SOURCES += stable.cpp
 
 HEADERS += \
     stable.h \
-    tst_pattern_dump.h
+    tst_pattern_dump.h \
+    tst_render_snapshot.h
 
 include(warnings.pri)
 

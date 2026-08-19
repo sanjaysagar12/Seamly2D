@@ -22,7 +22,8 @@
 //  along with Seamly2D. If not, see <http://www.gnu.org/licenses/>.
 //---------------------------------------------------------------------------------------------------------------------
 
-#include "tst_pattern_dump.h" // Brings in TST_PatternDump, the single test class this binary runs.
+#include "tst_pattern_dump.h"    // Brings in TST_PatternDump, one of the two test classes this binary runs.
+#include "tst_render_snapshot.h" // Brings in TST_RenderSnapshot, the other test class this binary runs.
 
 #include "../../libs/vmisc/vabstractapplication.h" // Brings in VAbstractApplication; constructing any VAbstractPattern needs a live qApp of this type.
 #include "../../libs/vpatterndb/vtranslatevars.h"  // Brings in VTranslateVars, the return type of translateVariables() below.
@@ -84,11 +85,18 @@ void ActionLayerTestApplication::initTranslateVariables()
     // Intentionally empty: this test never touches formula translation.
 }
 
-// Entry point: builds the one required app instance, then runs TST_PatternDump under QTest.
+// Entry point: builds the one required app instance, then runs every test class under QTest.
 int main(int argc, char **argv)
 {
     ActionLayerTestApplication app(argc, argv); // Must exist before any VAbstractPattern subclass is constructed.
 
-    TST_PatternDump testObject;            // The single test class this binary exercises.
-    return QTest::qExec(&testObject, argc, argv); // Runs every test slot; return value is this process's exit code.
+    int status = 0; // Accumulates a non-zero exit code if either test class reports any failure.
+
+    TST_PatternDump patternDumpTest;                          // Exercises pattern.dump/listMeasurements/listTools.
+    status |= QTest::qExec(&patternDumpTest, argc, argv);      // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
+
+    TST_RenderSnapshot renderSnapshotTest;                     // Exercises render.snapshot.
+    status |= QTest::qExec(&renderSnapshotTest, argc, argv);   // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
+
+    return status; // Non-zero if either test class reported any failure.
 }

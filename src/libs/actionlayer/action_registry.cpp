@@ -27,21 +27,23 @@
 #include "handlers/pattern_dump_handler.h"         // Brings in handlePatternDump(), registered under "pattern.dump".
 #include "handlers/pattern_measurements_handler.h" // Brings in handleListMeasurements(), registered under "pattern.listMeasurements".
 #include "handlers/pattern_list_tools_handler.h"   // Brings in handleListTools(), registered under "pattern.listTools".
+#include "handlers/render_handlers.h"              // Brings in handleRenderSnapshot(), registered under "render.snapshot".
 
-// Constructs an empty handler map, then immediately populates it with Phase 1's built-ins.
+// Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
 {
     registerBuiltinActions(); // Every freshly constructed registry is ready to use without extra setup calls.
 }
 
-// Registers the three Phase 1 read-only handlers under their documented op names. This is the
-// one place that lists every currently-registered op; pattern_list_tools_handler.cpp keeps its
-// own static, hand-written mirror of these names for the "pattern.listTools" response.
+// Registers every built-in handler under its documented op name. This is the one place that
+// lists every currently-registered op; pattern_list_tools_handler.cpp keeps its own static,
+// hand-written mirror of these names for the "pattern.listTools" response.
 void ActionRegistry::registerBuiltinActions()
 {
     registerAction(QStringLiteral("pattern.dump"), &handlePatternDump);                     // Geometry + history introspection.
     registerAction(QStringLiteral("pattern.listMeasurements"), &handleListMeasurements);    // Measurement variable listing.
     registerAction(QStringLiteral("pattern.listTools"), &handleListTools);                  // Static op-name capability listing.
+    registerAction(QStringLiteral("render.snapshot"), &handleRenderSnapshot);               // Scene-to-image rendering.
 }
 
 // Stores the handler function in the internal map under the given name.
