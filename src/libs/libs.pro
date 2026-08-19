@@ -15,4 +15,7 @@ SUBDIRS = \
     vformat \
     fervor \
     vtest \
-    tools
+    tools \
+    actionlayer
+
+actionlayer.depends = vpatterndb vgeometry ifc vmisc
