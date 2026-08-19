@@ -8,7 +8,8 @@ SOURCES += \
     $$PWD/handlers/pattern_dump_handler.cpp \
     $$PWD/handlers/pattern_measurements_handler.cpp \
     $$PWD/handlers/pattern_list_tools_handler.cpp \
-    $$PWD/handlers/render_handlers.cpp
+    $$PWD/handlers/render_handlers.cpp \
+    $$PWD/handlers/pattern_resolve_name_handler.cpp
 
 *msvc*:SOURCES += $$PWD/stable.cpp
 
@@ -23,4 +24,5 @@ HEADERS += \
     $$PWD/handlers/pattern_dump_handler.h \
     $$PWD/handlers/pattern_measurements_handler.h \
     $$PWD/handlers/pattern_list_tools_handler.h \
-    $$PWD/handlers/render_handlers.h
+    $$PWD/handlers/render_handlers.h \
+    $$PWD/handlers/pattern_resolve_name_handler.h

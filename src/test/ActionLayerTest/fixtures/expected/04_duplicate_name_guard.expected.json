@@ -1,0 +1,16 @@
+{
+    "results": [
+        {
+            "op": "pattern.resolveName",
+            "ok": true,
+            "value": {"name": "A1", "id": 2, "type": "Point"},
+            "error": ""
+        },
+        {
+            "op": "pattern.resolveName",
+            "ok": true,
+            "value": {"name": "A1", "id": 2, "type": "Point"},
+            "error": ""
+        }
+    ]
+}

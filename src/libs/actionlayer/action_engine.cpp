@@ -27,6 +27,7 @@
 #include "action_context.h"  // Brings in ActionContext, passed through to each dispatched handler.
 #include "action_registry.h" // Brings in ActionRegistry::action(), used to look up each op's handler.
 #include "action_result.h"   // Brings in ActionResult, the per-action value this file serializes to JSON.
+#include "name_resolver.h"   // Brings in ActionResolverError, caught below so a bad name never escapes run() uncaught.
 
 #include <QJsonArray>  // Provides QJsonArray, used for both the "actions" input and "results" output arrays.
 #include <QJsonObject> // Provides QJsonObject, used for the script's top-level object and each action/result entry.
@@ -76,7 +77,29 @@ QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext
             continue; // Move on to the next action; one bad op must not abort the whole script.
         }
 
-        const ActionResult result = handler(actionObject, ctx); // Dispatch to the registered handler with this action's fields.
+        ActionResult result; // Populated below either by the handler directly or by the ActionResolverError clause.
+        try
+        {
+            result = handler(actionObject, ctx); // Dispatch to the registered handler with this action's fields.
+        }
+        catch (const ActionResolverError &error) // Thrown by NameResolver when a handler names an unknown object/id.
+        {
+            QJsonObject errorDetail; // Structured failure so an automated (AI) caller can react to specific fields, not just parse a message string.
+            errorDetail["type"] = QStringLiteral("nameResolution"); // Stable, machine-readable category for this error family.
+            errorDetail["message"] = QStringLiteral("Unknown object name: %1").arg(error.name()); // Human-readable summary.
+            errorDetail["name"] = error.name(); // The specific name (or numeric id, as text) that failed to resolve.
+
+            QStringList knownNameList = error.knownNames(); // Copy so it can be sorted without mutating the exception.
+            knownNameList.sort(); // DataGObjects() is a QHash (unordered); sort so this array's order is deterministic for callers and tests.
+            QJsonArray knownNames; // Converts the sorted QStringList into a JSON array.
+            for (const QString &knownName : knownNameList) // Walk the sorted snapshot taken at throw time.
+            {
+                knownNames.append(knownName); // Append each known-good name in turn.
+            }
+            errorDetail["knownNames"] = knownNames; // Lets the caller self-correct without a second round trip.
+
+            result = ActionResult::failure(QJsonValue(errorDetail)); // Structured error payload instead of a plain message string.
+        }
         results.append(toJson(result, op)); // Record the handler's outcome, success or failure, in script order.
     }
 

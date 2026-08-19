@@ -40,14 +40,32 @@ OBJECTS_DIR = obj
 SOURCES += \
     main.cpp \
     tst_pattern_dump.cpp \
-    tst_render_snapshot.cpp
+    tst_render_snapshot.cpp \
+    tst_name_resolver.cpp \
+    tst_action_engine_batches.cpp
 
 *msvc*:SOURCES += stable.cpp
 
 HEADERS += \
     stable.h \
+    test_pattern_doc.h \
     tst_pattern_dump.h \
-    tst_render_snapshot.h
+    tst_render_snapshot.h \
+    tst_name_resolver.h \
+    tst_action_engine_batches.h
+
+# Fixture JSON files for tst_action_engine_batches.cpp; not compiled, but listed so they show up
+# in IDEs and so `make dist`/packaging steps that walk DISTFILES pick them up. Loaded at test-run
+# time via QFINDTESTDATA, not through Qt's resource system.
+DISTFILES += \
+    fixtures/action_batches/01_resolve_existing.json \
+    fixtures/action_batches/02_resolve_missing.json \
+    fixtures/action_batches/03_multi_action_chain.json \
+    fixtures/action_batches/04_duplicate_name_guard.json \
+    fixtures/expected/01_resolve_existing.expected.json \
+    fixtures/expected/02_resolve_missing.expected.json \
+    fixtures/expected/03_multi_action_chain.expected.json \
+    fixtures/expected/04_duplicate_name_guard.expected.json
 
 include(warnings.pri)
 

@@ -39,32 +39,34 @@
 #include <QJsonObject>  // Provides QJsonObject, used for each per-object/per-history-entry JSON record.
 #include <QSharedPointer> // Provides QSharedPointer and qSharedPointerDynamicCast, used to reach VPointF-specific data.
 
-namespace
+// Converts a GOType enumerator to its exact C++ name, so JSON consumers get a stable,
+// machine-readable label instead of a numeric value. Every enumerator is listed explicitly;
+// an unmapped value (e.g. from a future enumerator) falls through to the logged "Unknown" case.
+// Declared in pattern_dump_handler.h (not file-local) so pattern_resolve_name_handler.cpp can
+// reuse this exact stringification instead of duplicating it.
+QString goTypeToString(GOType type)
 {
-    // Converts a GOType enumerator to its exact C++ name, so JSON consumers get a stable,
-    // machine-readable label instead of a numeric value. Every enumerator is listed explicitly;
-    // an unmapped value (e.g. from a future enumerator) falls through to the logged "Unknown" case.
-    QString goTypeToString(GOType type)
+    switch (type)
     {
-        switch (type)
-        {
-            case GOType::Point:           return QStringLiteral("Point");           // Single point object.
-            case GOType::Arc:              return QStringLiteral("Arc");              // Circular arc object.
-            case GOType::EllipticalArc:    return QStringLiteral("EllipticalArc");    // Elliptical arc object.
-            case GOType::Spline:           return QStringLiteral("Spline");           // Quadratic spline object.
-            case GOType::SplinePath:       return QStringLiteral("SplinePath");       // Multi-point spline path object.
-            case GOType::CubicBezier:      return QStringLiteral("CubicBezier");      // Cubic bezier curve object.
-            case GOType::CubicBezierPath:  return QStringLiteral("CubicBezierPath");  // Multi-point cubic bezier path object.
-            case GOType::Unknown:          return QStringLiteral("Unknown");          // Explicit "not yet classified" enumerator.
-            case GOType::Curve:            return QStringLiteral("Curve");            // Generic curve category marker.
-            case GOType::Path:             return QStringLiteral("Path");             // Generic path category marker.
-            case GOType::AllCurves:        return QStringLiteral("AllCurves");        // "Any curve type" category marker.
-        }
-
-        qWarning() << "goTypeToString: unmapped GOType value" << static_cast<int>(type); // Log so a future enumerator gets noticed, not silently misreported.
-        return QStringLiteral("Unknown"); // Never crash on an unrecognized value; fail loudly via the warning above instead.
+        case GOType::Point:           return QStringLiteral("Point");           // Single point object.
+        case GOType::Arc:              return QStringLiteral("Arc");              // Circular arc object.
+        case GOType::EllipticalArc:    return QStringLiteral("EllipticalArc");    // Elliptical arc object.
+        case GOType::Spline:           return QStringLiteral("Spline");           // Quadratic spline object.
+        case GOType::SplinePath:       return QStringLiteral("SplinePath");       // Multi-point spline path object.
+        case GOType::CubicBezier:      return QStringLiteral("CubicBezier");      // Cubic bezier curve object.
+        case GOType::CubicBezierPath:  return QStringLiteral("CubicBezierPath");  // Multi-point cubic bezier path object.
+        case GOType::Unknown:          return QStringLiteral("Unknown");          // Explicit "not yet classified" enumerator.
+        case GOType::Curve:            return QStringLiteral("Curve");            // Generic curve category marker.
+        case GOType::Path:             return QStringLiteral("Path");             // Generic path category marker.
+        case GOType::AllCurves:        return QStringLiteral("AllCurves");        // "Any curve type" category marker.
     }
 
+    qWarning() << "goTypeToString: unmapped GOType value" << static_cast<int>(type); // Log so a future enumerator gets noticed, not silently misreported.
+    return QStringLiteral("Unknown"); // Never crash on an unrecognized value; fail loudly via the warning above instead.
+}
+
+namespace
+{
     // Converts a Tool enumerator to its exact C++ name, mirroring goTypeToString()'s contract:
     // every current enumerator is listed explicitly, and anything unmapped logs a warning and
     // reports "Unknown" instead of crashing.

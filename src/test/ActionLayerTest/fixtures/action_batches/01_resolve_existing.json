@@ -1,0 +1,5 @@
+{
+    "actions": [
+        {"op": "pattern.resolveName", "name": "A1"}
+    ]
+}

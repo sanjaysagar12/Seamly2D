@@ -44,6 +44,7 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("pattern.listMeasurements")); // Read-only measurement listing, implemented in pattern_measurements_handler.cpp.
     tools.append(QStringLiteral("pattern.listTools"));        // This op itself, so callers can discover it via introspection too.
     tools.append(QStringLiteral("render.snapshot"));          // Scene-to-image rendering, implemented in render_handlers.cpp.
+    tools.append(QStringLiteral("pattern.resolveName"));      // Phase 4: name -> id/type resolution, implemented in pattern_resolve_name_handler.cpp.
 
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.

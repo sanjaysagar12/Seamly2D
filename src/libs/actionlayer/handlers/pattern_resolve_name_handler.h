@@ -1,5 +1,5 @@
 //---------------------------------------------------------------------------------------------------------------------
-//  @file   pattern_dump_handler.h
+//  @file   pattern_resolve_name_handler.h
 //  @author Seamly2D Contributors
 //  @date   19 Aug, 2026
 //
@@ -22,25 +22,19 @@
 //  along with Seamly2D. If not, see <http://www.gnu.org/licenses/>.
 //---------------------------------------------------------------------------------------------------------------------
 
-#ifndef PATTERN_DUMP_HANDLER_H // Include guard start, prevents this header being processed twice in one translation unit.
-#define PATTERN_DUMP_HANDLER_H // Marks PATTERN_DUMP_HANDLER_H as defined for the remainder of the include guard.
+#ifndef PATTERN_RESOLVE_NAME_HANDLER_H // Include guard start, prevents this header being processed twice in one translation unit.
+#define PATTERN_RESOLVE_NAME_HANDLER_H // Marks PATTERN_RESOLVE_NAME_HANDLER_H as defined for the remainder of the include guard.
 
 #include "../action_result.h" // Provides ActionResult, this handler's return type.
-
-#include "../../vgeometry/vgeometrydef.h" // Provides the GOType enum, goTypeToString()'s parameter type; trivial header (enums only), safe to include directly.
-
-#include <QString> // Provides QString, goTypeToString()'s return type.
 
 class QJsonObject;   // Forward declaration; only used by const reference in the signature below.
 class ActionContext; // Forward declaration; only used by const reference in the signature below.
 
-// Implements the "pattern.dump" op: a read-only introspection dump of every geometry object
-// in the pattern's data container plus the tool history, as a single JSON payload.
-ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx); // Implemented in pattern_dump_handler.cpp.
+// Implements the "pattern.resolveName" op: resolves a pattern object's user-visible name to its
+// internal id and type, e.g. {"op": "pattern.resolveName", "name": "A1"} ->
+// {"name": "A1", "id": 47, "type": "Point"}. Read-only; exists mainly so Phase 4's name-resolution
+// layer (NameResolver) has a JSON-reachable action to exercise in integration tests, ahead of
+// Phase 5's mutating handlers that will consume names the same way internally.
+ActionResult handlePatternResolveName(const QJsonObject &args, const ActionContext &ctx); // Implemented in pattern_resolve_name_handler.cpp.
 
-// Converts a GOType enumerator to its exact C++ name (e.g. GOType::Point -> "Point"). Exposed here
-// (rather than kept file-local) so "pattern.resolveName" can report the same type label pattern.dump
-// does, instead of a second, potentially-drifting stringification of the same enum.
-QString goTypeToString(GOType type); // Implemented in pattern_dump_handler.cpp.
-
-#endif // PATTERN_DUMP_HANDLER_H // End of include guard started above.
+#endif // PATTERN_RESOLVE_NAME_HANDLER_H // End of include guard started above.

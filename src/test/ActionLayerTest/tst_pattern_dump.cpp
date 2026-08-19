@@ -30,55 +30,12 @@
 
 #include "../../libs/vpatterndb/vcontainer.h" // Brings in VContainer, holding the hand-built points for this test.
 #include "../../libs/vgeometry/vpointf.h"     // Brings in VPointF, the point objects added to the container below.
-#include "../../libs/ifc/xml/vabstractpattern.h" // Brings in VAbstractPattern, the base class the test's stub document extends.
 #include "../../libs/ifc/xml/vtoolrecord.h"      // Brings in VToolRecord, the history entries added to the stub document.
 #include "../../libs/vmisc/def.h"                // Brings in the Unit and Tool enums used below.
 
+#include "test_pattern_doc.h" // Brings in TestPatternDoc, the minimal VAbstractPattern stub shared by every ActionLayerTest file.
+
 #include <QtTest> // Provides QCOMPARE/QVERIFY and the QTest infrastructure this file's slots run under.
-
-namespace
-{
-    // Minimal concrete VAbstractPattern: implements every pure virtual with a trivial, no-op
-    // body since this test never exercises XML parsing, label generation, or reference
-    // counting -- only getHistory(), which VAbstractPattern already implements concretely.
-    class TestPatternDoc : public VAbstractPattern
-    {
-    public:
-        explicit TestPatternDoc(QObject *parent = nullptr) // Forwards straight to the base constructor.
-            : VAbstractPattern(parent) // Base constructor reads default line settings via qApp, hence main.cpp's app bootstrap.
-        {
-        }
-
-        void CreateEmptyFile() override {} // Never called: this test builds state directly, not from an empty document.
-
-        void IncrementReferens(quint32 id) const override { Q_UNUSED(id) } // Reference counting is irrelevant to a read-only dump.
-        void DecrementReferens(quint32 id) const override { Q_UNUSED(id) } // Reference counting is irrelevant to a read-only dump.
-
-        QStringList GetCurrentAlphabet() const override { return QStringList(); } // No label alphabet needed for this test.
-
-        QString GenerateLabel(const LabelType &type, const QString &reservedName = QString()) const override
-        {
-            Q_UNUSED(type)         // Label generation is outside pattern.dump's scope.
-            Q_UNUSED(reservedName) // Label generation is outside pattern.dump's scope.
-            return QString();      // No label text needed for this test.
-        }
-
-        QString GenerateSuffix(const QString &type) const override
-        {
-            Q_UNUSED(type)    // Suffix generation is outside pattern.dump's scope.
-            return QString(); // No suffix text needed for this test.
-        }
-
-        void UpdateToolData(const quint32 &id, VContainer *data) override
-        {
-            Q_UNUSED(id)   // This test never re-parses tool data; history is populated directly instead.
-            Q_UNUSED(data) // This test never re-parses tool data; history is populated directly instead.
-        }
-
-    public slots:
-        void LiteParseTree(const Document &parse) override { Q_UNUSED(parse) } // Never invoked: no XML parsing occurs in this test.
-    };
-}
 
 // Trivial constructor; every test slot builds its own container/document/context from scratch.
 TST_PatternDump::TST_PatternDump(QObject *parent)

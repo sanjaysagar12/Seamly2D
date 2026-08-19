@@ -25,20 +25,69 @@
 #ifndef NAME_RESOLVER_H // Include guard start, prevents this header being processed twice in one translation unit.
 #define NAME_RESOLVER_H // Marks NAME_RESOLVER_H as defined for the remainder of the include guard.
 
-#include <QString>  // Provides QString, used by reference/value in both method signatures below.
-#include <QtGlobal> // Provides quint32, the id type used by both resolver methods below.
+#include <QString>     // Provides QString, used by reference/value throughout this header.
+#include <QStringList> // Provides QStringList, the type of ActionResolverError's knownNames list.
+#include <QtGlobal>    // Provides quint32, the id type used by both resolver methods below.
+#include <stdexcept>   // Provides std::runtime_error, ActionResolverError's base class.
 
-class VContainer; // Forward declaration; only a pointer to it appears in the signatures below.
+// resolveTyped() below is a template method that calls VContainer::GeometricObject<T>(), itself a
+// template member function -- the compiler needs VContainer's full definition at every call site
+// this header is included from, not just a forward declaration.
+#include "../vpatterndb/vcontainer.h"
 
-// NameResolver will translate between human-readable pattern object names and their internal ids.
+// ActionResolverError is thrown by NameResolver when a JSON action names a pattern object that
+// does not exist. It carries both the offending name and a fresh snapshot of every name that
+// *does* exist, so ActionEngine can serialize a self-correcting error an automated (AI) caller can
+// act on directly, instead of just a message string.
+class ActionResolverError : public std::runtime_error
+{
+public:
+    // Builds the error from the name that failed to resolve and the known-good names at throw time.
+    ActionResolverError(const QString &missingName, const QStringList &knownNames)
+        : std::runtime_error(("Unknown object name: " + missingName).toStdString()), // std::runtime_error requires a message at construction; this doubles as what().
+          m_name(missingName),    // Store the offending name for name() below.
+          m_knownNames(knownNames) // Store the known-good names for knownNames() below.
+    {
+    }
+
+    // Getter returning the name that failed to resolve.
+    QString name() const { return m_name; } // Returns the stored missing name unchanged.
+
+    // Getter returning every name known to the container at throw time (may be empty; see NameResolver::nameForId).
+    QStringList knownNames() const { return m_knownNames; } // Returns the stored known-names snapshot unchanged.
+
+private:
+    QString m_name;          // The name (or, for nameForId(), the numeric id as text) that failed to resolve.
+    QStringList m_knownNames; // Every object name found in the container at throw time; empty when not meaningful.
+};
+
+// NameResolver translates between human-readable pattern object names and their internal ids.
+// Every lookup is a linear scan over VContainer::DataGObjects() rather than a cached reverse map:
+// DataGObjects() returns a live pointer into mutable state, and a cache would go stale the moment
+// any later action (a future mutating handler) creates or renames an object. This is deliberately
+// deferred optimization, not an oversight -- revisit only if profiling shows it matters.
 class NameResolver
 {
 public:
-    // Looks up the internal id for a named pattern object. Stubbed in Phase 0; see the .cpp file.
-    static quint32 idForName(const QString &name, const VContainer *data); // Implemented in name_resolver.cpp.
+    // Looks up the internal id for a named pattern object. Throws ActionResolverError if no
+    // object in data->DataGObjects() has this name. Implemented in name_resolver.cpp.
+    static quint32 idForName(const QString &name, const VContainer *data);
 
-    // Looks up the human-readable name for an internal pattern object id. Stubbed in Phase 0; see the .cpp file.
-    static QString nameForId(quint32 id, const VContainer *data); // Implemented in name_resolver.cpp.
+    // Looks up the human-readable name for an internal pattern object id. Throws
+    // ActionResolverError if the id is not present in data->DataGObjects(). Implemented in
+    // name_resolver.cpp.
+    static QString nameForId(quint32 id, const VContainer *data);
+
+    // Convenience typed wrapper: resolves name to an id, then returns it as a QSharedPointer<T>
+    // via VContainer::GeometricObject<T>(). Throws ActionResolverError (unresolved name) or
+    // VExceptionBadId (id resolved but T is the wrong type for it) exactly as those two calls do
+    // individually.
+    template <class T>
+    static QSharedPointer<T> resolveTyped(const QString &name, const VContainer *data)
+    {
+        const quint32 id = idForName(name, data); // Throws ActionResolverError if unresolved; propagates unchanged.
+        return data->GeometricObject<T>(id);      // Typed accessor; id was just confirmed present in data.
+    }
 };
 
 #endif // NAME_RESOLVER_H // End of include guard started above.

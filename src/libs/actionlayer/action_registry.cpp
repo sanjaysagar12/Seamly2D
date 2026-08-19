@@ -28,6 +28,7 @@
 #include "handlers/pattern_measurements_handler.h" // Brings in handleListMeasurements(), registered under "pattern.listMeasurements".
 #include "handlers/pattern_list_tools_handler.h"   // Brings in handleListTools(), registered under "pattern.listTools".
 #include "handlers/render_handlers.h"              // Brings in handleRenderSnapshot(), registered under "render.snapshot".
+#include "handlers/pattern_resolve_name_handler.h" // Brings in handlePatternResolveName(), registered under "pattern.resolveName".
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -44,6 +45,7 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("pattern.listMeasurements"), &handleListMeasurements);    // Measurement variable listing.
     registerAction(QStringLiteral("pattern.listTools"), &handleListTools);                  // Static op-name capability listing.
     registerAction(QStringLiteral("render.snapshot"), &handleRenderSnapshot);               // Scene-to-image rendering.
+    registerAction(QStringLiteral("pattern.resolveName"), &handlePatternResolveName);       // Phase 4: name -> id/type resolution diagnostic.
 }
 
 // Stores the handler function in the internal map under the given name.
