@@ -1,0 +1,94 @@
+//---------------------------------------------------------------------------------------------------------------------
+//  @file   main.cpp
+//  @author Seamly2D Contributors
+//  @date   19 Aug, 2026
+//
+//  @copyright
+//  Copyright (C) 2017 - 2026 Seamly, LLC
+//  https://github.com/fashionfreedom/seamly2d
+//
+//  @brief
+//  Seamly2D is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  Seamly2D is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with Seamly2D. If not, see <http://www.gnu.org/licenses/>.
+//---------------------------------------------------------------------------------------------------------------------
+
+#include "tst_pattern_dump.h" // Brings in TST_PatternDump, the single test class this binary runs.
+
+#include "../../libs/vmisc/vabstractapplication.h" // Brings in VAbstractApplication; constructing any VAbstractPattern needs a live qApp of this type.
+#include "../../libs/vpatterndb/vtranslatevars.h"  // Brings in VTranslateVars, the return type of translateVariables() below.
+#include "../../libs/vmisc/vsettings.h"             // Brings in VSettings, constructed in openSettings() below.
+#include "../../libs/vmisc/projectversion.h"        // Brings in VER_INTERNALNAME_2D_STR / VER_COMPANYNAME_STR for app identity.
+
+#include <QtTest> // Provides QTest::qExec(), used to run the test class below.
+
+// Minimal VAbstractApplication subclass so qApp->Settings() resolves during this binary's run.
+// VAbstractPattern's own constructor reads default line settings via qApp, so any test that
+// constructs a VAbstractPattern subclass needs exactly this kind of app instance alive first.
+// Mirrors qttestmainlambda.cpp's TestApplication2D; duplicated here (rather than reused) because
+// this is a separate standalone test binary, not a participant in the Seamly2DTests target.
+class ActionLayerTestApplication : public VAbstractApplication
+{
+public:
+    ActionLayerTestApplication(int &argc, char **argv); // Constructs the app and opens its settings.
+    virtual ~ActionLayerTestApplication() Q_DECL_EQ_DEFAULT; // Default destruction is sufficient; nothing owned beyond base class.
+
+    virtual const VTranslateVars *translateVariables(); // Required override; this test never formats translated formulas.
+    virtual void                  openSettings();        // Required override; creates the VSettings qApp->Settings() returns.
+    virtual bool                  isAppInGUIMode() const; // Required override; false keeps this binary non-interactive.
+    virtual void                  initTranslateVariables(); // Required override; no-op, matching translateVariables() returning null.
+};
+
+// Constructs the base VApplication, names it, then opens settings so qApp->Settings() is valid.
+ActionLayerTestApplication::ActionLayerTestApplication(int &argc, char **argv)
+    : VAbstractApplication(argc, argv) // Base class does the actual QApplication setup.
+{
+    setApplicationName(VER_INTERNALNAME_2D_STR); // Matches the real app's identity for settings-file compatibility.
+    setOrganizationName(VER_COMPANYNAME_STR);    // Matches the real app's identity for settings-file compatibility.
+    openSettings();                              // Populate m_settings before any VAbstractPattern subclass is constructed.
+}
+
+// No translation-variable support is needed for a JSON-introspection test; returning null is safe
+// because this test never calls a code path that formats a formula through it.
+const VTranslateVars *ActionLayerTestApplication::translateVariables()
+{
+    return nullptr; // No translator needed; nothing under test calls into it.
+}
+
+// Creates the VSettings instance qApp->Settings() will return for the remainder of this run.
+void ActionLayerTestApplication::openSettings()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, // Locate the standard per-user ini settings file...
+                        QCoreApplication::organizationName(), QCoreApplication::applicationName()); // ...under this app's identity.
+    m_settings = new VSettings(settings.fileName(), QSettings::IniFormat, this); // Wrap that same file as this app's VSettings.
+}
+
+// Running headless: no windows are created, so this always reports GUI mode as off.
+bool ActionLayerTestApplication::isAppInGUIMode() const
+{
+    return false; // Headless test binary; nothing here presents UI.
+}
+
+// No translation variables to initialize for this test binary.
+void ActionLayerTestApplication::initTranslateVariables()
+{
+    // Intentionally empty: this test never touches formula translation.
+}
+
+// Entry point: builds the one required app instance, then runs TST_PatternDump under QTest.
+int main(int argc, char **argv)
+{
+    ActionLayerTestApplication app(argc, argv); // Must exist before any VAbstractPattern subclass is constructed.
+
+    TST_PatternDump testObject;            // The single test class this binary exercises.
+    return QTest::qExec(&testObject, argc, argv); // Runs every test slot; return value is this process's exit code.
+}

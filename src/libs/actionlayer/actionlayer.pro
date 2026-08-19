@@ -8,7 +8,7 @@
 message("Entering actionlayer.pro")
 include(../../../common.pri)
 
-QT += core widgets
+QT += core widgets printsupport xml
 
 # Name of the library
 TARGET = actionlayer

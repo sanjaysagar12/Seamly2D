@@ -24,6 +24,26 @@
 
 #include "action_registry.h" // Brings in the ActionRegistry class declaration this file implements.
 
+#include "handlers/pattern_dump_handler.h"         // Brings in handlePatternDump(), registered under "pattern.dump".
+#include "handlers/pattern_measurements_handler.h" // Brings in handleListMeasurements(), registered under "pattern.listMeasurements".
+#include "handlers/pattern_list_tools_handler.h"   // Brings in handleListTools(), registered under "pattern.listTools".
+
+// Constructs an empty handler map, then immediately populates it with Phase 1's built-ins.
+ActionRegistry::ActionRegistry()
+{
+    registerBuiltinActions(); // Every freshly constructed registry is ready to use without extra setup calls.
+}
+
+// Registers the three Phase 1 read-only handlers under their documented op names. This is the
+// one place that lists every currently-registered op; pattern_list_tools_handler.cpp keeps its
+// own static, hand-written mirror of these names for the "pattern.listTools" response.
+void ActionRegistry::registerBuiltinActions()
+{
+    registerAction(QStringLiteral("pattern.dump"), &handlePatternDump);                     // Geometry + history introspection.
+    registerAction(QStringLiteral("pattern.listMeasurements"), &handleListMeasurements);    // Measurement variable listing.
+    registerAction(QStringLiteral("pattern.listTools"), &handleListTools);                  // Static op-name capability listing.
+}
+
 // Stores the handler function in the internal map under the given name.
 void ActionRegistry::registerAction(const QString &name, ActionFn fn)
 {
@@ -34,4 +54,10 @@ void ActionRegistry::registerAction(const QString &name, ActionFn fn)
 bool ActionRegistry::hasAction(const QString &name) const
 {
     return m_actions.contains(name); // QHash::contains performs the presence check.
+}
+
+// Looks up the handler registered under the given name, if any.
+ActionRegistry::ActionFn ActionRegistry::action(const QString &name) const
+{
+    return m_actions.value(name); // QHash::value returns a default-constructed (empty/falsy) ActionFn when the key is absent.
 }

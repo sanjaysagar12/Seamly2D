@@ -25,19 +25,27 @@
 #ifndef ACTION_REGISTRY_H // Include guard start, prevents this header being processed twice in one translation unit.
 #define ACTION_REGISTRY_H // Marks ACTION_REGISTRY_H as defined for the remainder of the include guard.
 
+#include "action_result.h" // Provides ActionResult, the return type every registered handler must produce.
+
 #include <QHash>       // Provides QHash, used to map action names to their handler functions.
 #include <QString>     // Provides QString, used as the action name key type.
-#include <QJsonObject> // Provides QJsonObject, used in the handler function's parameter and return types.
+#include <QJsonObject> // Provides QJsonObject, used in the handler function's argument type.
 #include <functional>  // Provides std::function, used to store the handler callables.
 
-class ActionContext; // Forward declaration; only a reference to it appears in the handler signature.
+class ActionContext; // Forward declaration; only a const reference to it appears in the handler signature.
 
-// ActionRegistry holds the mapping from action name to the function that implements it.
+// ActionRegistry holds the mapping from action op name to the function that implements it.
+// The default constructor registers Phase 1's built-in read-only handlers (pattern.dump,
+// pattern.listMeasurements, pattern.listTools) so any freshly constructed registry is
+// immediately usable by ActionEngine without extra setup calls.
 class ActionRegistry
 {
 public:
     // Alias for the handler signature every registered action function must match.
-    using ActionFn = std::function<QJsonObject(const QJsonObject&, ActionContext&)>; // Keeps signatures below readable.
+    using ActionFn = std::function<ActionResult(const QJsonObject&, const ActionContext&)>; // Keeps signatures below readable.
+
+    // Constructs an empty map, then registers Phase 1's built-in handlers into it.
+    ActionRegistry(); // Implemented in action_registry.cpp.
 
     // Registers a handler function under the given action name, overwriting any prior entry with that name.
     void registerAction(const QString &name, ActionFn fn); // Implemented in action_registry.cpp.
@@ -45,8 +53,15 @@ public:
     // Returns true if a handler has already been registered under the given action name.
     bool hasAction(const QString &name) const; // Implemented in action_registry.cpp.
 
+    // Returns the handler registered under the given name, or an empty (falsy) std::function if none exists.
+    ActionFn action(const QString &name) const; // Implemented in action_registry.cpp.
+
 private:
-    QHash<QString, ActionFn> m_actions; // Empty container in Phase 0; no actions are registered yet.
+    // Registers the three Phase 1 handlers (pattern.dump, pattern.listMeasurements,
+    // pattern.listTools) under their op names. Called once, from the constructor.
+    void registerBuiltinActions(); // Implemented in action_registry.cpp.
+
+    QHash<QString, ActionFn> m_actions; // Maps op name -> handler; populated by registerBuiltinActions() at construction.
 };
 
 #endif // ACTION_REGISTRY_H // End of include guard started above.
