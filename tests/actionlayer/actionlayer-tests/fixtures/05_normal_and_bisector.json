@@ -1,0 +1,22 @@
+{
+  "id": "05",
+  "actions": [
+    { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+    { "op": "endLine", "name": "B", "basePoint": "A",
+      "length": "15", "angle": "0", "lineType": "hair" },
+    { "op": "endLine", "name": "C", "basePoint": "A",
+      "length": "15", "angle": "90", "lineType": "hair" },
+    { "op": "line", "firstPoint": "A", "secondPoint": "B", "lineType": "hair" },
+    { "op": "line", "firstPoint": "A", "secondPoint": "C", "lineType": "hair" },
+
+    { "op": "normal", "name": "N1", "firstPoint": "A", "secondPoint": "B",
+      "length": "5", "angle": "0", "lineType": "none" },
+
+    { "op": "bisector", "name": "Bis1",
+      "firstPoint": "B", "secondPoint": "A", "thirdPoint": "C",
+      "length": "8", "lineType": "none" },
+
+    { "op": "pattern.dump" },
+    { "op": "render.snapshot", "path": "snapshot.png", "width": 400, "height": 400 }
+  ]
+}

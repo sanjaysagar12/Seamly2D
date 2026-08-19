@@ -1,0 +1,29 @@
+{
+  "id": "09",
+  "measurements": "../measurements/male_shirt.smis",
+  "actions": [
+    { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+
+    { "op": "endLine", "name": "A1", "basePoint": "A",
+      "length": "neck_back_to_waist_b", "angle": "90", "lineType": "hair" },
+    { "op": "line", "firstPoint": "A", "secondPoint": "A1", "lineType": "hair" },
+
+    { "op": "endLine", "name": "A2", "basePoint": "A",
+      "length": "shoulder_length", "angle": "0", "lineType": "hair" },
+    { "op": "line", "firstPoint": "A", "secondPoint": "A2", "lineType": "hair" },
+
+    { "op": "alongLine", "name": "A3", "firstPoint": "A", "secondPoint": "A1",
+      "length": "Line_A_A1/3", "lineType": "none" },
+
+    { "op": "normal", "name": "N1", "firstPoint": "A", "secondPoint": "A2",
+      "length": "3", "angle": "0", "lineType": "none" },
+
+    { "op": "bisector", "name": "Bis1",
+      "firstPoint": "A2", "secondPoint": "A", "thirdPoint": "A1",
+      "length": "6", "lineType": "none" },
+
+    { "op": "pattern.dump" },
+    { "op": "render.snapshot", "path": "snapshot.png", "width": 500, "height": 700 },
+    { "op": "session.save", "path": "pattern.val" }
+  ]
+}

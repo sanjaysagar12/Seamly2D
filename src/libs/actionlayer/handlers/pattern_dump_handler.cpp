@@ -30,9 +30,18 @@
 #include "../../vgeometry/vgobject.h"     // Brings in VGObject: name(), getType().
 #include "../../vgeometry/vpointf.h"      // Brings in VPointF: x(), y(), used only for GOType::Point objects.
 #include "../../vgeometry/vgeometrydef.h" // Brings in the GOType enum classified by goTypeToString() below.
-#include "../../ifc/xml/vabstractpattern.h" // Brings in VAbstractPattern::getHistory(), the source of tool-history entries.
+#include "../../ifc/xml/vabstractpattern.h" // Brings in VAbstractPattern::getHistory() (tool-history entries) and the static getTool(id) used below to reach a point's live tool instance.
 #include "../../ifc/xml/vtoolrecord.h"      // Brings in VToolRecord: getId(), getTypeTool(), getDraftBlockName().
 #include "../../vmisc/def.h"                // Brings in the Tool enum classified by toolToString() below.
+#include "../../vpatterndb/vformula.h"      // Brings in VFormula/FormulaType, used to read a formula-bearing tool's raw (non-localized) formula string.
+
+// Phase 6: pulls in the two tool classes whose formula strings pattern.dump now reports.
+// actionlayer.pro does not link libvtools itself -- only actiond.pro/ActionLayerTest.pro do, for
+// the final executable -- so this is a header-only dependency, the same idiom render_handlers.cpp
+// already relies on for vdatatool.h (see that file's own comment on the point).
+#include "../../vtools/tools/vdatatool.h" // Brings in VDataTool, the type VAbstractPattern::getTool() returns.
+#include "../../vtools/tools/drawTools/toolpoint/toolsinglepoint/toollinepoint/vtoollinepoint.h" // Brings in VToolLinePoint::GetFormulaLength(), shared by endLine/alongLine/normal/bisector/shoulderPoint.
+#include "../../vtools/tools/drawTools/toolpoint/toolsinglepoint/toollinepoint/vtoolendline.h"   // Brings in VToolEndLine::GetFormulaAngle(), the one extra formula only endLine has.
 
 #include <QDebug>       // Provides qWarning(), used to log any enumerator this file doesn't yet know how to name.
 #include <QJsonArray>   // Provides QJsonArray, used to build the "objects" and "history" JSON arrays.
@@ -170,6 +179,35 @@ ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx
                     {
                         entry["x"] = point->x(); // Point's x coordinate, in the pattern's working units.
                         entry["y"] = point->y(); // Point's y coordinate, in the pattern's working units.
+                    }
+
+                    // Phase 6: expose the raw formula string(s) behind a formula-bearing point, so
+                    // fixtures/consumers can diff/inspect pattern structure (not just resolved
+                    // geometry) without re-deriving it from the XML. getTool() is a process-wide
+                    // static lookup (VAbstractPattern::tools), keyed by the same id every one of
+                    // this file's Create()-based tools registers itself under via
+                    // VAbstractPattern::AddTool(id, this) -- the identical idiom render_handlers.cpp
+                    // already uses to resolve a highlight name's live tool instance.
+                    VDataTool *pointTool = VAbstractPattern::getTool(it.key());
+                    // VToolLinePoint is the common base of endLine/alongLine/normal/bisector/
+                    // shoulderPoint (VToolLineIntersect is not one -- it has no formula at all, so
+                    // this cast simply fails for it, exactly as intended). FormulaType::FromUser
+                    // reverses the ToUser-side translateVariables() round trip VFormula's
+                    // constructor performs, giving back the same non-localized formula string this
+                    // action layer's own endLine/alongLine/normal/bisector/shoulderPoint handlers
+                    // passed into Create() (see formula_point_handlers.cpp), not a GUI-localized one.
+                    if (VToolLinePoint *linePointTool = qobject_cast<VToolLinePoint *>(pointTool))
+                    {
+                        entry["formulaLength"] = linePointTool->GetFormulaLength().GetFormula(FormulaType::FromUser);
+
+                        // VToolEndLine is the one tool in this family with a second (angle) formula;
+                        // every other VToolLinePoint subclass either has no angle at all (alongLine,
+                        // bisector, shoulderPoint) or a plain numeric one, not a formula (normal --
+                        // see formula_point_handlers.cpp's handleNormal() comment).
+                        if (VToolEndLine *endLineTool = qobject_cast<VToolEndLine *>(pointTool))
+                        {
+                            entry["formulaAngle"] = endLineTool->GetFormulaAngle().GetFormula(FormulaType::FromUser);
+                        }
                     }
                 }
 

@@ -31,6 +31,7 @@
 #include "handlers/pattern_resolve_name_handler.h" // Brings in handlePatternResolveName(), registered under "pattern.resolveName".
 #include "handlers/point_handlers.h"                // Brings in handleBasePoint(), registered under "basePoint".
 #include "handlers/line_handlers.h"                 // Brings in handleLine(), registered under "line".
+#include "handlers/formula_point_handlers.h"        // Brings in the six Phase 6 handle*() functions below (endLine, alongLine, normal, bisector, shoulderPoint, lineIntersect).
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -50,6 +51,12 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("pattern.resolveName"), &handlePatternResolveName);       // Phase 4: name -> id/type resolution diagnostic.
     registerAction(QStringLiteral("basePoint"), &handleBasePoint);                          // Phase 5: mutating -- creates a new draft block's anchor point.
     registerAction(QStringLiteral("line"), &handleLine);                                    // Phase 5: mutating -- connects two named points with a line.
+    registerAction(QStringLiteral("endLine"), &handleEndLine);                              // Phase 6: mutating -- point at formula distance+angle from a base point.
+    registerAction(QStringLiteral("alongLine"), &handleAlongLine);                          // Phase 6: mutating -- point at formula distance along an existing line.
+    registerAction(QStringLiteral("normal"), &handleNormal);                                // Phase 6: mutating -- point at formula distance along the normal to a line.
+    registerAction(QStringLiteral("bisector"), &handleBisector);                            // Phase 6: mutating -- point at formula distance along an angle bisector.
+    registerAction(QStringLiteral("shoulderPoint"), &handleShoulderPoint);                  // Phase 6: mutating -- point at formula distance from a shoulder point toward a line.
+    registerAction(QStringLiteral("lineIntersect"), &handleLineIntersect);                  // Phase 6: mutating -- point at the intersection of two existing lines.
 }
 
 // Stores the handler function in the internal map under the given name.

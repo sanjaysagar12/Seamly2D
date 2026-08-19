@@ -11,7 +11,8 @@ SOURCES += \
     $$PWD/handlers/render_handlers.cpp \
     $$PWD/handlers/pattern_resolve_name_handler.cpp \
     $$PWD/handlers/point_handlers.cpp \
-    $$PWD/handlers/line_handlers.cpp
+    $$PWD/handlers/line_handlers.cpp \
+    $$PWD/handlers/formula_point_handlers.cpp
 
 *msvc*:SOURCES += $$PWD/stable.cpp
 
@@ -29,4 +30,5 @@ HEADERS += \
     $$PWD/handlers/render_handlers.h \
     $$PWD/handlers/pattern_resolve_name_handler.h \
     $$PWD/handlers/point_handlers.h \
-    $$PWD/handlers/line_handlers.h
+    $$PWD/handlers/line_handlers.h \
+    $$PWD/handlers/formula_point_handlers.h

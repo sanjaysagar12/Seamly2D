@@ -1,0 +1,10 @@
+{
+  "id": "08",
+  "_comment": "The 'length' formula below is intentionally malformed (unbalanced parens, unknown variable). Expected: the daemon returns a structured JSON error for this action (and, per the batch error-isolation policy chosen in Phase 9, either aborts the remaining actions in this batch or skips them) -- it must NOT hang waiting on a dialog and must NOT crash the process. Run this fixture, then send fixture 02 in a fresh request to the SAME still-running process to confirm the daemon is still alive and state is uncorrupted.",
+  "actions": [
+    { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+    { "op": "endLine", "name": "A1", "basePoint": "A",
+      "length": "totally_unknown_measurement * (", "angle": "0", "lineType": "hair" },
+    { "op": "pattern.dump" }
+  ]
+}

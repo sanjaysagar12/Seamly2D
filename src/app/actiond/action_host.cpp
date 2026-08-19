@@ -90,6 +90,14 @@ namespace ActionHost
         QGraphicsScene *currentScene = &draftScene; // setCurrentScene() takes QGraphicsScene** so qApp always sees the latest value, matching MainWindow's own pattern.
         qApp->setCurrentScene(&currentScene);
         qApp->setSceneView(&sceneView);
+        // Phase 6: attaches sceneView to draftScene so draftScene.views() is non-empty. Several
+        // paint() overrides elsewhere (e.g. VGraphicsSimpleTextItem::paint(), used by every point's
+        // name label) unconditionally call scene->views().at(0) -- QList::at() with an out-of-range
+        // index is undefined behavior in a release build (no bounds check), so a scene with zero
+        // attached views crashes the whole process the first time render.snapshot's scene->render()
+        // paints a point with its name label shown. MainWindow attaches its own view via
+        // ui->view->setScene(...); this is that same attachment for actiond's offscreen view.
+        sceneView.setScene(&draftScene);
 
         // QScopedPointer gives doc RAII cleanup on every return path (including the exceptions
         // thrown by setXMLContent()/Parse() below) without a manual try/catch-and-delete.

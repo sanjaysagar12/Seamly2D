@@ -47,6 +47,12 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("pattern.resolveName"));      // Phase 4: name -> id/type resolution, implemented in pattern_resolve_name_handler.cpp.
     tools.append(QStringLiteral("basePoint"));                 // Phase 5: mutating base-point/draft-block creation, implemented in point_handlers.cpp.
     tools.append(QStringLiteral("line"));                       // Phase 5: mutating line creation, implemented in line_handlers.cpp.
+    tools.append(QStringLiteral("endLine"));                    // Phase 6: mutating formula point-at-distance+angle creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("alongLine"));                  // Phase 6: mutating formula point-along-line creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("normal"));                     // Phase 6: mutating formula point-via-normal creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("bisector"));                   // Phase 6: mutating formula bisector-point creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("shoulderPoint"));               // Phase 6: mutating formula shoulder-point creation, implemented in formula_point_handlers.cpp.
+    tools.append(QStringLiteral("lineIntersect"));               // Phase 6: mutating line/line intersection point creation, implemented in formula_point_handlers.cpp.
 
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.
