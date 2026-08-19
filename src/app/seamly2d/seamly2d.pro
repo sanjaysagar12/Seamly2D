@@ -258,15 +258,6 @@ DEPENDPATH += $$PWD/../../libs/vpatterndb
 win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vpatterndb/$${DESTDIR}/vpatterndb.lib
 else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vpatterndb/$${DESTDIR}/libvpatterndb.a
 
-#ActionLayer static library (depends on vpatterndb, vgeometry, ifc)
-unix|win32: LIBS += -L$$OUT_PWD/../../libs/actionlayer/$${DESTDIR}/ -lactionlayer
-
-INCLUDEPATH += $$PWD/../../libs/actionlayer
-DEPENDPATH += $$PWD/../../libs/actionlayer
-
-win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/actionlayer/$${DESTDIR}/actionlayer.lib
-else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/actionlayer/$${DESTDIR}/libactionlayer.a
-
 # VGeometry static library (depend on ifc)
 unix|win32: LIBS += -L$$OUT_PWD/../../libs/vgeometry/$${DESTDIR}/ -lvgeometry
 

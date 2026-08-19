@@ -32,7 +32,10 @@
 #include <QLoggingCategory>
 #include <QWidget>
 
-#include "../../../app/seamly2d/core/application_2d.h"
+// Was "../../../app/seamly2d/core/application_2d.h": this file's only Application2D-specific call
+// (Seamly2DSettings()->getImageFilePath(), above) now goes through the base VAbstractApplication
+// qApp macro instead, so a lib-level file no longer needs to reach into app/seamly2d/ at all.
+#include "../../vmisc/vabstractapplication.h"
 #include "image_item.h"
 #include "../vpropertyexplorer/checkablemessagebox.h"
 
@@ -61,7 +64,12 @@ QString getImageFilename(QWidget *parent)
                            "XBM" + QLatin1String(" (*.xbm);;") +
                            "XPM" + QLatin1String(" (*.xpm)");
 
-    const QString path = qApp->Seamly2DSettings()->getImageFilePath();
+    // Was qApp->Seamly2DSettings(), an Application2D-only accessor. getImageFilePath() is declared
+    // on the base VCommonSettings class (which qApp->Settings() already returns), so no cast is
+    // needed -- same fix pattern as vpattern.cpp's isHideSeamLine()/getForbidPieceFlipping() call
+    // sites, applied here because ImageTool's translation unit is pulled into any target that
+    // links VPattern::parseImageElement()'s ImageTool dependency, this dialog-only function included.
+    const QString path = qApp->Settings()->getImageFilePath();
 
     QDir directory(path);
     if (!directory.exists())

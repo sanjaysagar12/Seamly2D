@@ -67,6 +67,9 @@
 #include "../vmisc/vmath.h"
 #include "../vmisc/projectversion.h"
 #include "../vmisc/vabstractapplication.h"
+// Was previously pulled in transitively through application_2d.h (now removed above); V_EX_NOINPUT
+// is used directly below, so it needs its own explicit include now that that indirect path is gone.
+#include "../vmisc/vsysexits.h"
 #include "../qmuparser/qmuparsererror.h"
 #include "../qmuparser/qmutokenparser.h"
 #include "../vgeometry/varc.h"
@@ -74,7 +77,10 @@
 #include "../vgeometry/vsplinepath.h"
 #include "../vgeometry/vcubicbezier.h"
 #include "../vgeometry/vcubicbezierpath.h"
-#include "../core/application_2d.h"
+// application_2d.h intentionally not included: it redefines qApp to Application2D*, which this
+// file no longer needs now that its two former Application2D-only call sites (isGUIMode() and
+// pointNameLanguages()) go through polymorphic VAbstractApplication methods instead. Keeping the
+// include out means this file compiles under any VAbstractApplication subclass, not just Application2D.
 #include "../vpatterndb/vpiecenode.h"
 #include "../vpatterndb/calculator.h"
 #include "../vpatterndb/floatItemData/vpiecelabeldata.h"
@@ -566,7 +572,7 @@ void VPattern::LiteParseTree(const Document &parse)
         qCCritical(vXML, "%s\n\n%s\n\n%s", qUtf8Printable(tr("Error parsing file.")), //-V807
                    qUtf8Printable(error.ErrorMessage()), qUtf8Printable(error.DetailedInformation()));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -577,7 +583,7 @@ void VPattern::LiteParseTree(const Document &parse)
         qCCritical(vXML, "%s\n\n%s\n\n%s", qUtf8Printable(tr("Error can't convert value.")),
                    qUtf8Printable(error.ErrorMessage()), qUtf8Printable(error.DetailedInformation()));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -588,7 +594,7 @@ void VPattern::LiteParseTree(const Document &parse)
         qCCritical(vXML, "%s\n\n%s\n\n%s", qUtf8Printable(tr("Error empty parameter.")),
                    qUtf8Printable(error.ErrorMessage()), qUtf8Printable(error.DetailedInformation()));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -599,7 +605,7 @@ void VPattern::LiteParseTree(const Document &parse)
         qCCritical(vXML, "%s\n\n%s\n\n%s", qUtf8Printable(tr("Error wrong id.")),
                    qUtf8Printable(error.ErrorMessage()), qUtf8Printable(error.DetailedInformation()));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -610,7 +616,7 @@ void VPattern::LiteParseTree(const Document &parse)
         qCCritical(vXML, "%s\n\n%s\n\n%s", qUtf8Printable(tr("Error parsing file.")),
                    qUtf8Printable(error.ErrorMessage()), qUtf8Printable(error.DetailedInformation()));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -620,7 +626,7 @@ void VPattern::LiteParseTree(const Document &parse)
     {
         qCCritical(vXML, "%s", qUtf8Printable(tr("Error parsing file (std::bad_alloc).")));
         emit setGuiEnabled(false);
-        if (not Application2D::isGUIMode())
+        if (not qApp->isAppInGUIMode()) // Was Application2D::isGUIMode(); routed through the polymorphic qApp pointer so this file no longer needs the concrete Application2D class.
         {
             qApp->exit(V_EX_NOINPUT);
         }
@@ -874,12 +880,15 @@ void VPattern::parsePieceElement(QDomElement &domElement, const Document &parse)
         piece.SetMx(qApp->toPixel(GetParametrDouble(domElement, AttrMx, "0.0")));
         piece.SetMy(qApp->toPixel(GetParametrDouble(domElement, AttrMy, "0.0")));
         piece.SetSeamAllowance(getParameterBool(domElement, PatternPieceTool::AttrSeamAllowance, falseStr));
+        // Was qApp->Seamly2DSettings(), an Application2D-only accessor. isHideSeamLine()/
+        // getForbidPieceFlipping() are both declared on VCommonSettings (the base type
+        // qApp->Settings() already returns), so no cast is needed here, unlike getPointNameLanguage() above.
         piece.setHideSeamLine(getParameterBool(domElement, PatternPieceTool::AttrHideSeamLine,
-                                               QString().setNum(qApp->Seamly2DSettings()->isHideSeamLine())));
+                                               QString().setNum(qApp->Settings()->isHideSeamLine())));
         piece.SetSeamAllowanceBuiltIn(getParameterBool(domElement, PatternPieceTool::AttrSeamAllowanceBuiltIn,
                                                        falseStr));
         piece.SetForbidFlipping(getParameterBool(domElement, PatternPieceTool::AttrForbidFlipping,
-                                           QString().setNum(qApp->Seamly2DSettings()->getForbidPieceFlipping())));
+                                           QString().setNum(qApp->Settings()->getForbidPieceFlipping())));
         piece.setInLayout(getParameterBool(domElement, AttrInLayout, trueStr));
         piece.SetUnited(getParameterBool(domElement, PatternPieceTool::AttrUnited, falseStr));
 
@@ -1321,10 +1330,14 @@ void VPattern::parseCurrentDraftBlock()
 
 QStringList VPattern::GetCurrentAlphabet() const
 {
-    const QStringList list = Application2D::pointNameLanguages();
+    const QStringList list = qApp->pointNameLanguages(); // Was Application2D::pointNameLanguages(); now the polymorphic VAbstractApplication virtual (see vabstractapplication.h).
     const QString def = QStringLiteral("A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z");
     QStringList alphabet;
-    switch (list.indexOf(qApp->Seamly2DSettings()->getPointNameLanguage()))
+    // Was qApp->Seamly2DSettings(), an Application2D-only accessor. qApp->Settings() (declared on the
+    // VAbstractApplication base every caller of VPattern::Parse() actually uses) always returns a VSettings
+    // instance in practice -- Application2D and actiond's ActiondApplication both construct one in
+    // openSettings() -- so this cast is safe without adding a new virtual just for one settings getter.
+    switch (list.indexOf(static_cast<VSettings *>(qApp->Settings())->getPointNameLanguage()))
     {
     case 0: // de
     {

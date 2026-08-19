@@ -60,6 +60,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList> // Provides QStringList, the return type of the new pointNameLanguages() virtual added below.
 #include <QtGlobal>
 
 #include "../vmisc/def.h"
@@ -131,6 +132,14 @@ public:
     QUndoStack      *getUndoStack() const;
 
     virtual bool     isAppInGUIMode()const =0;
+
+    // Languages the point-name validator accepts, e.g. for VPattern::Parse(). Virtual (with a
+    // concrete default below) rather than pure, so existing VAbstractApplication subclasses that
+    // predate this method keep building unmodified; a subclass may still override it if it needs
+    // a different list. Added so VPattern can reach this through the polymorphic qApp pointer
+    // instead of naming a concrete Application2D-only static method, which is what previously
+    // made VPattern.cpp uncompilable outside the seamly2d GUI target.
+    virtual QStringList pointNameLanguages() const;
 
     QString         getFilePath() const;
     void            setFilePath(const QString &value);

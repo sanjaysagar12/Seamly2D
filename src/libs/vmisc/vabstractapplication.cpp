@@ -115,6 +115,28 @@ VAbstractApplication::~VAbstractApplication()
 
 //---------------------------------------------------------------------------------------------------------------------
 /**
+ * @brief pointNameLanguages languages the point-name validator accepts.
+ * @return the list of supported language codes.
+ *
+ * This is the same fixed list Application2D::pointNameLanguages() has always returned; it lives
+ * here too (as a virtual with this default body) so code that only has a VAbstractApplication
+ * pointer -- such as VPattern::Parse(), or a non-GUI VAbstractApplication subclass -- can reach
+ * it without naming the concrete Application2D class.
+ */
+QStringList VAbstractApplication::pointNameLanguages() const
+{
+    return QStringList() << "de"  // German
+                          << "en"  // English
+                          << "fr"  // French
+                          << "ru"  // Russian
+                          << "uk"  // Ukrainian
+                          << "hr"  // Croatian
+                          << "sr"  // Serbian
+                          << "bs"; // Bosnian
+}
+
+//---------------------------------------------------------------------------------------------------------------------
+/**
  * @brief translationsPath return path to the root directory that contains QM files.
  * @param locale historic, not used
  * @return path to a directory that contains QM files, default from CONFIG+=embed_translations as set in translations.pri
