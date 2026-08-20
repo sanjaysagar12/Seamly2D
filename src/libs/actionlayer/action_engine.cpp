@@ -82,12 +82,38 @@ QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext
         {
             result = handler(actionObject, ctx); // Dispatch to the registered handler with this action's fields.
         }
-        catch (const ActionResolverError &error) // Thrown by NameResolver when a handler names an unknown object/id.
+        catch (const ActionResolverError &error) // Thrown by NameResolver when a handler names an unknown/ambiguous/wrong-scope object.
         {
             QJsonObject errorDetail; // Structured failure so an automated (AI) caller can react to specific fields, not just parse a message string.
-            errorDetail["type"] = QStringLiteral("nameResolution"); // Stable, machine-readable category for this error family.
-            errorDetail["message"] = QStringLiteral("Unknown object name: %1").arg(error.name()); // Human-readable summary.
+            errorDetail["type"] = QStringLiteral("nameResolution"); // Stable, machine-readable category for this whole error family (all three Kinds below).
             errorDetail["name"] = error.name(); // The specific name (or numeric id, as text) that failed to resolve.
+
+            // "kind" distinguishes the three ways a lookup can fail (see ActionResolverError::Kind
+            // in name_resolver.h) -- added so an automated caller can tell "this name doesn't
+            // exist at all" apart from "this name exists, but only as a piece-node reference, not
+            // a usable calculation-context object" (Phase 8's piece.addPatternPiece/
+            // piece.internalPath legitimately produce that second situation once any piece
+            // exists; a plain "unknown name" message would be actively misleading there, since
+            // the name *is* known -- just not usable the way the caller intended).
+            switch (error.kind())
+            {
+                case ActionResolverError::Kind::NotFound:
+                    errorDetail["kind"] = QStringLiteral("notFound");
+                    errorDetail["message"] = QStringLiteral("Unknown object name: %1").arg(error.name());
+                    break;
+                case ActionResolverError::Kind::WrongScope:
+                    errorDetail["kind"] = QStringLiteral("wrongScope");
+                    errorDetail["foundInScope"] = error.wrongScopeFoundAs(); // e.g. "modeling" -- which Draw mode the name *was* found in.
+                    errorDetail["message"] = QStringLiteral(
+                        "Object name \"%1\" exists, but only as a %2 object, not in the scope this action requires")
+                        .arg(error.name(), error.wrongScopeFoundAs());
+                    break;
+                case ActionResolverError::Kind::Duplicate:
+                    errorDetail["kind"] = QStringLiteral("duplicate");
+                    errorDetail["message"] = QStringLiteral(
+                        "Ambiguous object name (more than one match in the required scope): %1").arg(error.name());
+                    break;
+            }
 
             QStringList knownNameList = error.knownNames(); // Copy so it can be sorted without mutating the exception.
             knownNameList.sort(); // DataGObjects() is a QHash (unordered); sort so this array's order is deterministic for callers and tests.

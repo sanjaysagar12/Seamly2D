@@ -71,6 +71,16 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a point").arg(fieldName, name);
         }
+        // Defense-in-depth: id was resolved via NameResolver::idForName(..., Draw::Calculation)
+        // above, which should already make a non-Calculation object impossible here -- but this
+        // is a cheap, load-bearing check against a future call site that reintroduces the
+        // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+        // same-named Draw::Modeling piece-node clone can otherwise be resolved instead).
+        if (obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context point")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
         return QString();
     }
 
@@ -146,7 +156,7 @@ namespace
                 outError = QStringLiteral("%1: \"sourceObjects\" contains a non-string/empty entry").arg(op);
                 return false;
             }
-            const quint32 id = NameResolver::idForName(name, data); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
+            const quint32 id = NameResolver::idForName(name, data, Draw::Calculation); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
 
             SourceItem item;
             item.id = id;
@@ -242,7 +252,7 @@ ActionResult handleMove(const QJsonObject &args, const ActionContext &ctx)
     if (args.contains(QStringLiteral("rotationOrigin")))
     {
         const QString originName = args.value(QStringLiteral("rotationOrigin")).toString();
-        originPointId = NameResolver::idForName(originName, data);
+        originPointId = NameResolver::idForName(originName, data, Draw::Calculation);
         const QString typeError = checkIsPoint(data, originPointId, QStringLiteral("rotationOrigin"), originName);
         if (!typeError.isEmpty())
         {
@@ -294,7 +304,7 @@ ActionResult handleRotation(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("rotation: context is missing a scene, document, or data container"));
     }
 
-    const quint32 originId = NameResolver::idForName(originName, data);
+    const quint32 originId = NameResolver::idForName(originName, data, Draw::Calculation);
     const QString originTypeError = checkIsPoint(data, originId, QStringLiteral("origin"), originName);
     if (!originTypeError.isEmpty())
     {
@@ -351,8 +361,8 @@ ActionResult handleMirrorByLine(const QJsonObject &args, const ActionContext &ct
             QStringLiteral("mirrorByLine: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstId = NameResolver::idForName(firstName, data);
-    const quint32 secondId = NameResolver::idForName(secondName, data);
+    const quint32 firstId = NameResolver::idForName(firstName, data, Draw::Calculation);
+    const quint32 secondId = NameResolver::idForName(secondName, data, Draw::Calculation);
     const QString firstTypeError = checkIsPoint(data, firstId, QStringLiteral("firstLinePoint"), firstName);
     if (!firstTypeError.isEmpty())
     {
@@ -425,7 +435,7 @@ ActionResult handleMirrorByAxis(const QJsonObject &args, const ActionContext &ct
             QStringLiteral("mirrorByAxis: context is missing a scene, document, or data container"));
     }
 
-    const quint32 originId = NameResolver::idForName(originName, data);
+    const quint32 originId = NameResolver::idForName(originName, data, Draw::Calculation);
     const QString originTypeError = checkIsPoint(data, originId, QStringLiteral("originPoint"), originName);
     if (!originTypeError.isEmpty())
     {
@@ -503,7 +513,7 @@ ActionResult handleGroup(const QJsonObject &args, const ActionContext &ctx)
         {
             return ActionResult::failure(QStringLiteral("group: \"sourceObjects\" contains a non-string/empty entry"));
         }
-        const quint32 id = NameResolver::idForName(objName, data); // Uncaught by design; see resolveSourceObjects()'s comment above.
+        const quint32 id = NameResolver::idForName(objName, data, Draw::Calculation); // Uncaught by design; see resolveSourceObjects()'s comment above.
         groupData.insert(id, id);
         sourceNamesEcho.append(objName);
     }
@@ -585,11 +595,11 @@ ActionResult handleTrueDarts(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("trueDarts: context is missing a scene, document, or data container"));
     }
 
-    const quint32 baseLineP1Id = NameResolver::idForName(baseLineP1Name, data);
-    const quint32 baseLineP2Id = NameResolver::idForName(baseLineP2Name, data);
-    const quint32 dartP1Id = NameResolver::idForName(dartP1Name, data);
-    const quint32 dartP2Id = NameResolver::idForName(dartP2Name, data);
-    const quint32 dartP3Id = NameResolver::idForName(dartP3Name, data);
+    const quint32 baseLineP1Id = NameResolver::idForName(baseLineP1Name, data, Draw::Calculation);
+    const quint32 baseLineP2Id = NameResolver::idForName(baseLineP2Name, data, Draw::Calculation);
+    const quint32 dartP1Id = NameResolver::idForName(dartP1Name, data, Draw::Calculation);
+    const quint32 dartP2Id = NameResolver::idForName(dartP2Name, data, Draw::Calculation);
+    const quint32 dartP3Id = NameResolver::idForName(dartP3Name, data, Draw::Calculation);
 
     for (const auto &pair : { std::make_pair(baseLineP1Id, baseLineP1Name), std::make_pair(baseLineP2Id, baseLineP2Name),
                               std::make_pair(dartP1Id, dartP1Name), std::make_pair(dartP2Id, dartP2Name),

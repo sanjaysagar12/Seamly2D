@@ -41,39 +41,38 @@ class ActionContext;
 // Only point-type nodes are currently supported by "nodes" arrays in this file (Tool::NodePoint);
 // arc/curve piece nodes are a documented gap for a follow-up phase, not a silent mismatch.
 //
-// FOUND AND PARTIALLY FIXED -- NameResolver/piece-node-clone name collision (found while
-// validating tests/actionlayer/cases/03_import_l_shape_to_rectangle as genuine run-to-run
-// non-determinism: the same actions.json resolved "basePoint": "B" to a different object id
-// across separate process runs of the identical build). Root cause: VAbstractTool::
-// CreateNode<VPointF>() copy-constructs each piece node's clone from its source point, which also
-// copies the source's name() verbatim (even though the clone's serialized XML
-// <point type="modeling"> element never carries a "name" attribute -- only NameResolver's
-// in-memory lookup ever reads it). Once any piece exists, NameResolver::idForName()
-// (name_resolver.cpp) -- a plain linear scan over VContainer::DataGObjects() with no preference
-// between a "calculation" object and a "modeling" clone that happen to share a name -- can
+// FOUND AND FIXED -- NameResolver/piece-node-clone name collision (found while validating
+// tests/actionlayer/cases/03_import_l_shape_to_rectangle as genuine run-to-run non-determinism:
+// the same actions.json resolved "basePoint": "B" to a different object id across separate
+// process runs of the identical build -- and, worse, one of those resolutions produced a saved
+// <calculation> element referencing an id only ever *defined* later, in <modeling>, which then
+// failed to reopen in Seamly2D's own document-order parser with "ExceptionBadId: Can't find
+// object Id: , id = 14"). Root cause: VAbstractTool::CreateNode<VPointF>() copy-constructs each
+// piece node's clone from its source point, which also copies the source's name() verbatim (even
+// though the clone's serialized XML <point type="modeling"> element never carries a "name"
+// attribute -- only NameResolver's in-memory lookup ever reads it) -- and, independently,
+// VPattern::ParseNodePoint() (src/app/seamly2d/xml/vpattern.cpp) does the exact same thing when
+// *reloading* a saved piece, so the collision reappears on every load, not just within the
+// process that first created the piece. Before this fix, NameResolver::idForName()
+// (name_resolver.cpp) was a plain linear scan over VContainer::DataGObjects() with no preference
+// between a "calculation" object and a "modeling" clone that happen to share a name, so it could
 // resolve to either one, depending on QHash's per-process randomized iteration order.
 //
-// Fixed for FRESH creation: resolvePreparedPointNodes() below immediately renames every clone it
-// creates to a synthetic, collision-proof id-based name right after creation, so within a single
-// process a caller-supplied name can only ever match the real, live object from that point on.
-// This is a purely action-layer-local fix (the clone's name is never serialized in the first
-// place) -- NameResolver/name_resolver.cpp itself, shared Phase 1-7 infrastructure, was not
-// touched.
+// THE ACTUAL FIX is NameResolver::idForName()'s scoped (Draw requiredMode) overload -- see
+// name_resolver.h's own comment on it -- now used by every calculation-context handler in this
+// action layer (line_handlers.cpp, formula_point_handlers.cpp, curve_handlers.cpp,
+// cutpoint_handlers.cpp, operation_handlers.cpp, piece_handlers.cpp, render_handlers.cpp's
+// "highlight" resolution). It filters on VGObject::getMode() before ever comparing names, so it
+// is architecturally unable to match a Draw::Modeling clone when Draw::Calculation was requested
+// -- regardless of whether that clone was created moments ago in this same process or
+// reconstructed by reloading a file, which is what makes this fix complete for both cases
+// (verified: cases/03_import_l_shape_to_rectangle now produces byte-identical output across
+// repeated runs, and its saved rectangle.val was confirmed to reload cleanly through actiond's own
+// real VPattern::Parse() path -- the same parser Seamly2D's interactive GUI uses -- with no error).
 //
-// STILL OPEN for RELOADED clones: this fix does not reach clones that already exist in a
-// *loaded* pattern file (e.g. tests/actionlayer/fixtures/l_shape_seed.val's own piece-node
-// clones from when case 02 first created them) -- confirmed by re-running case 03 against the
-// same seed file multiple times and observing a different `basePoint`/`firstPoint` reference id
-// each time. Whatever code path in VPattern::Parse() reconstructs a <point type="modeling"> XML
-// element back into a live VPointF re-derives its name from the idObject it points to,
-// independent of anything this handler does; fixing that is out of scope here (deep, shared XML
-// parsing infrastructure -- VPattern lives under src/app/seamly2d/xml/, which this phase's own
-// constraints explicitly rule out modifying). The practical impact is limited to which of two
-// id-equal-coordinate
-// objects gets referenced -- both candidates sit at the exact same (x, y), so every case 03
-// render/bounding-box/coordinate result is still deterministic and correct; only the specific
-// internal id attribute value in the saved XML can vary run to run. See
-// tests/actionlayer/README.md's "Known gaps" section for how this affects golden-file comparison.
+// resolvePreparedPointNodes() below still also renames every clone it creates (a second,
+// independent safety net predating the scoped overload -- see that rename's own comment for why
+// it is kept rather than removed now that it is no longer load-bearing on its own).
 
 // Implements "piece.addPatternPiece": {"name","nodes":["A","B","C","D"],"seamAllowanceWidth",
 // "seamAllowance"?,"fill"?,"pieceColor"?} -> {"id","name","op"}. "seamAllowance" (default true)

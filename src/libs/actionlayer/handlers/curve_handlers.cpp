@@ -73,6 +73,16 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a point").arg(fieldName, name);
         }
+        // Defense-in-depth: id was resolved via NameResolver::idForName(..., Draw::Calculation)
+        // above, which should already make a non-Calculation object impossible here -- but this
+        // is a cheap, load-bearing check against a future call site that reintroduces the
+        // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+        // same-named Draw::Modeling piece-node clone can otherwise be resolved instead).
+        if (obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context point")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
         return QString();
     }
 
@@ -150,8 +160,8 @@ ActionResult handleSpline(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("spline: context is missing a scene, document, or data container"));
     }
 
-    const quint32 point1Id = NameResolver::idForName(point1Name, data);
-    const quint32 point4Id = NameResolver::idForName(point4Name, data);
+    const quint32 point1Id = NameResolver::idForName(point1Name, data, Draw::Calculation);
+    const quint32 point4Id = NameResolver::idForName(point4Name, data, Draw::Calculation);
     const QString point1TypeError = checkIsPoint(data, point1Id, QStringLiteral("point1"), point1Name);
     if (!point1TypeError.isEmpty())
     {
@@ -231,7 +241,7 @@ ActionResult handleSplinePath(const QJsonObject &args, const ActionContext &ctx)
                 QStringLiteral("splinePath: entry %1 (\"%2\") requires \"length1\" and \"length2\" formulas").arg(i).arg(pointName));
         }
 
-        const quint32 pointId = NameResolver::idForName(pointName, data);
+        const quint32 pointId = NameResolver::idForName(pointName, data, Draw::Calculation);
         const QString typeError = checkIsPoint(data, pointId, QStringLiteral("points"), pointName);
         if (!typeError.isEmpty())
         {
@@ -289,10 +299,10 @@ ActionResult handleCubicBezier(const QJsonObject &args, const ActionContext &ctx
         return ActionResult::failure(QStringLiteral("cubicBezier: context is missing a scene, document, or data container"));
     }
 
-    const quint32 point1Id = NameResolver::idForName(point1Name, data);
-    const quint32 point2Id = NameResolver::idForName(point2Name, data);
-    const quint32 point3Id = NameResolver::idForName(point3Name, data);
-    const quint32 point4Id = NameResolver::idForName(point4Name, data);
+    const quint32 point1Id = NameResolver::idForName(point1Name, data, Draw::Calculation);
+    const quint32 point2Id = NameResolver::idForName(point2Name, data, Draw::Calculation);
+    const quint32 point3Id = NameResolver::idForName(point3Name, data, Draw::Calculation);
+    const quint32 point4Id = NameResolver::idForName(point4Name, data, Draw::Calculation);
 
     for (const auto &pair : { std::make_pair(point1Id, point1Name), std::make_pair(point2Id, point2Name),
                               std::make_pair(point3Id, point3Name), std::make_pair(point4Id, point4Name) })
@@ -375,7 +385,7 @@ ActionResult handleCubicBezierPath(const QJsonObject &args, const ActionContext 
         {
             return ActionResult::failure(QStringLiteral("cubicBezierPath: entry %1 is not a non-empty point name").arg(i));
         }
-        const quint32 pointId = NameResolver::idForName(pointName, data);
+        const quint32 pointId = NameResolver::idForName(pointName, data, Draw::Calculation);
         const QString typeError = checkIsPoint(data, pointId, QStringLiteral("points"), pointName);
         if (!typeError.isEmpty())
         {
@@ -441,7 +451,7 @@ ActionResult handleArc(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("arc: context is missing a scene, document, or data container"));
     }
 
-    const quint32 centerId = NameResolver::idForName(centerName, data);
+    const quint32 centerId = NameResolver::idForName(centerName, data, Draw::Calculation);
     const QString typeError = checkIsPoint(data, centerId, QStringLiteral("center"), centerName);
     if (!typeError.isEmpty())
     {
@@ -493,7 +503,7 @@ ActionResult handleArcWithLength(const QJsonObject &args, const ActionContext &c
         return ActionResult::failure(QStringLiteral("arcWithLength: context is missing a scene, document, or data container"));
     }
 
-    const quint32 centerId = NameResolver::idForName(centerName, data);
+    const quint32 centerId = NameResolver::idForName(centerName, data, Draw::Calculation);
     const QString typeError = checkIsPoint(data, centerId, QStringLiteral("center"), centerName);
     if (!typeError.isEmpty())
     {
@@ -548,7 +558,7 @@ ActionResult handleEllipticalArc(const QJsonObject &args, const ActionContext &c
             QStringLiteral("ellipticalArc: context is missing a scene, document, or data container"));
     }
 
-    const quint32 centerId = NameResolver::idForName(centerName, data);
+    const quint32 centerId = NameResolver::idForName(centerName, data, Draw::Calculation);
     const QString typeError = checkIsPoint(data, centerId, QStringLiteral("center"), centerName);
     if (!typeError.isEmpty())
     {

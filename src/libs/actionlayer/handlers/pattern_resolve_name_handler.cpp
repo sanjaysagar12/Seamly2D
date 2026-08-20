@@ -51,7 +51,19 @@ ActionResult handlePatternResolveName(const QJsonObject &args, const ActionConte
         return ActionResult::failure(QStringLiteral("pattern.resolveName: no data container available in this context"));
     }
 
-    const quint32 id = NameResolver::idForName(name, data); // Throws ActionResolverError on an unknown name; not caught here by design.
+    // Deliberately unscoped (matches any Draw mode), unlike every calculation-context handler
+    // (line_handlers.cpp, formula_point_handlers.cpp, curve_handlers.cpp, cutpoint_handlers.cpp,
+    // operation_handlers.cpp, piece_handlers.cpp), which all resolve against Draw::Calculation
+    // only (see NameResolver::idForName()'s scoped overload in name_resolver.h). This op's entire
+    // purpose is "what does this name resolve to, in the container as a whole" -- an
+    // introspection/debugging tool for an automated caller trying to understand the pattern's
+    // name space, including a name that only exists as a piece-node clone (Draw::Modeling) or is
+    // genuinely ambiguous. Scoping this call would turn "tell me what's going on with this name"
+    // into another routine Kind::WrongScope failure, defeating the point: idForName()'s Kind::
+    // Duplicate case (thrown by the unscoped overload too, now that the old Q_ASSERT_X was
+    // replaced with a real check -- see name_resolver.cpp) is exactly the diagnostic signal an
+    // ambiguous name should produce here.
+    const quint32 id = NameResolver::idForName(name, data); // Throws ActionResolverError on an unknown/ambiguous name; not caught here by design.
     const QSharedPointer<VGObject> obj = data->GeometricObject<VGObject>(id); // id was just confirmed present, so this will not throw in practice.
 
     QJsonObject payload; // Builds the documented {"name", "id", "type"} result.

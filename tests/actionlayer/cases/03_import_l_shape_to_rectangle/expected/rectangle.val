@@ -35,9 +35,9 @@
             <line firstPoint="4" id="10" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="5"/>
             <line firstPoint="5" id="11" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="6"/>
             <line firstPoint="6" id="12" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="1"/>
-            <point angle="90" basePoint="14" id="20" length="200" lineColor="black" lineType="solidLine" lineWeight="0.35" mx="0" my="0" name="G" showPointName="true" type="endLine"/>
-            <line firstPoint="14" id="21" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="20"/>
-            <line firstPoint="20" id="22" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="18"/>
+            <point angle="90" basePoint="2" id="20" length="200" lineColor="black" lineType="solidLine" lineWeight="0.35" mx="0" my="0" name="G" showPointName="true" type="endLine"/>
+            <line firstPoint="2" id="21" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="20"/>
+            <line firstPoint="20" id="22" lineColor="black" lineType="solidLine" lineWeight="0.35" secondPoint="6"/>
         </calculation>
         <modeling>
             <point id="13" idObject="1" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
@@ -47,9 +47,9 @@
             <point id="17" idObject="5" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
             <point id="18" idObject="6" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
             <point id="23" idObject="1" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
-            <point id="24" idObject="14" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
+            <point id="24" idObject="2" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
             <point id="25" idObject="20" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
-            <point id="26" idObject="18" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
+            <point id="26" idObject="6" inUse="true" mx="0" my="0" showPointName="true" type="modeling"/>
         </modeling>
         <pieces>
             <piece color="white" fill="nobrush" forbidFlipping="false" hideMainPath="false" id="19" inLayout="true" locked="false" mx="0" my="0" name="LShape" seamAllowance="true" united="false" version="2" width="10">

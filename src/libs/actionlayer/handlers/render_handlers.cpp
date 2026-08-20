@@ -244,8 +244,28 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
             continue; // Nothing meaningful to do with an empty name.
         }
 
-        const quint32 id = NameResolver::idForName(name, ctx.data()); // Resolve the name to an internal id; 0 signals "not resolved" (see name_resolver.cpp).
-        if (id == 0) // Unresolvable name (includes every name until NameResolver's Phase 2 implementation lands).
+        // Scoped to Draw::Calculation: ctx.scene() is the draft scene, which only ever contains
+        // calculation-context items (piece-node clones live in ActionContext::pieceScene()
+        // instead -- see piece_handlers.cpp). Resolving to a same-named Draw::Modeling clone here
+        // would look up a real, registered VDataTool (so it wouldn't be "skipped"), but that
+        // tool's graphics item lives in the *other* scene, and item->sceneBoundingRect() below is
+        // later treated as being in ctx.scene()'s coordinate space when computing the highlight
+        // overlay -- silently drawing the highlight in the wrong place rather than failing
+        // visibly. Scoping the lookup turns that into a clean "skipped" entry instead.
+        //
+        // idForName() always throws on an unresolvable/wrong-scope/ambiguous name (it has never
+        // had a "return 0" path since NameResolver's Phase 2 landed); this used to be an
+        // unguarded call whose exception would propagate out of this whole handler, failing
+        // render.snapshot entirely over one bad highlight name -- silently contradicting this
+        // loop's own "skip it, keep going" intent (dead "if (id == 0)" code was the only visible
+        // trace of that intent). Caught here instead, exactly like every other "highlight name
+        // didn't pan out" case below.
+        quint32 id = 0;
+        try
+        {
+            id = NameResolver::idForName(name, ctx.data(), Draw::Calculation);
+        }
+        catch (const ActionResolverError &)
         {
             qWarning() << "render.snapshot: could not resolve highlight name to an id:" << name; // Logged per the spec, but does not fail the whole action.
             skippedHighlights.append(name); // Reported back to the caller as skipped.

@@ -56,6 +56,16 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a point").arg(fieldName, name);
         }
+        // Defense-in-depth: id was resolved via NameResolver::idForName(..., Draw::Calculation)
+        // above, which should already make a non-Calculation object impossible here -- but this
+        // is a cheap, load-bearing check against a future call site that reintroduces the
+        // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+        // same-named Draw::Modeling piece-node clone can otherwise be resolved instead).
+        if (obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context point")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
         return QString(); // Empty string signals "no problem found".
     }
 }
@@ -90,8 +100,8 @@ ActionResult handleLine(const QJsonObject &args, const ActionContext &ctx)
     // ActionEngine::run()'s existing Phase 4 catch clause serializes it into the same structured
     // {"type":"nameResolution",...} shape "pattern.resolveName" already produces, instead of this
     // handler inventing a second, differently-shaped "unknown point" error.
-    const quint32 firstId = NameResolver::idForName(firstName, data);
-    const quint32 secondId = NameResolver::idForName(secondName, data);
+    const quint32 firstId = NameResolver::idForName(firstName, data, Draw::Calculation);
+    const quint32 secondId = NameResolver::idForName(secondName, data, Draw::Calculation);
 
     const QString firstTypeError = checkIsPoint(data, firstId, QStringLiteral("firstPoint"), firstName);   // See checkIsPoint()'s comment for why this guard exists.
     if (!firstTypeError.isEmpty())

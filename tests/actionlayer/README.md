@@ -127,35 +127,47 @@ summary for anyone deciding whether to rely on the affected ops.
   node id `PrepareNode()` had *just* created moments earlier in the same call. Handled cleanly
   (the batch continues, no crash), but not root-caused. See the `KNOWN GAP` comment on
   `handlePieceInsertNodes()`'s declaration.
-- **`NameResolver` can resolve a name to a piece-node clone instead of the live original, once
-  any piece exists -- fixed for fresh creation, still open across a save/reload round trip.**
+- ~~`NameResolver` can resolve a name to a piece-node clone instead of the live original~~ --
+  **found, root-caused, and fixed.** Originally surfaced as genuine **run-to-run
+  non-determinism** while authoring case 03: the identical `actions.json`, run against the
+  identical `fixtures/l_shape_seed.val` build, resolved `endLine "G"`'s `"basePoint": "B"` to a
+  *different* object id across separate process runs -- and on at least one run, produced a saved
+  `rectangle.val` with a `<calculation>` element referencing an id only ever *defined* later, in
+  `<modeling>`, which then **failed to reopen** with `ExceptionBadId: Can't find object Id: , id
+  = 14` (the file-corruption half of the bug, not just cosmetic non-determinism). Root cause:
   `piece.addPatternPiece`/`piece.internalPath` clone each named point
   (`VAbstractTool::CreateNode<VPointF>()`) to build a valid piece-path node, and that clone's
-  in-memory name is copied verbatim from its source; `NameResolver::idForName()` has no
-  preference between the two candidates. Confirmed as genuine **run-to-run non-determinism**
-  while authoring case 03 (the identical `actions.json`, run against the identical
-  `fixtures/l_shape_seed.val` build, resolved `endLine "G"`'s `"basePoint": "B"` to a *different*
-  object id across separate process runs). `piece_handlers.cpp` now renames every clone it
-  creates within the same process to a synthetic, collision-proof name immediately after creating
-  it (verified: cases 01 and 02, which never reload a file mid-run, are now fully byte-identical
-  across repeated runs -- see the `FOUND AND PARTIALLY FIXED` comment at the top of
-  `src/libs/actionlayer/handlers/piece_handlers.h`). **This fix does not reach clones that already
-  exist inside a *loaded* pattern file** -- case 03 specifically, which loads
-  `fixtures/l_shape_seed.val` (itself containing piece-node clones from when case 02 first created
-  it) -- because whatever code inside `VPattern::Parse()` reconstructs a
-  `<point type="modeling">` XML element back into a live object re-derives its name from the
-  object it points to, independent of this handler; fixing that is out of scope here (deep,
-  shared XML-parsing infrastructure -- and the one plausible owner, `VPattern::Parse()`, lives
-  under `src/app/seamly2d/xml/`, which this phase's own constraints explicitly rule out touching). **Practical impact:** both candidate objects always sit at
-  the exact same `(x, y)` (one is a never-modified copy of the other), so case 03's actual
-  geometry -- coordinates, `render.snapshot`'s bounding box, node counts -- stays correct and
-  deterministic on every run; only the specific `basePoint`/`firstPoint` **id** attribute
-  referenced for `G` (and the corresponding `idObject` under `<modeling>`) can differ between
-  runs. `golden_diff.py` compares those id attributes exactly, so **a golden-diff run against
-  `cases/03_import_l_shape_to_rectangle/expected/rectangle.val` may report a mismatch on exactly
-  those two id values on some runs** -- treat that specific, narrow mismatch (an id substitution
-  between two objects with identical coordinates) as a known, harmless flake, not a regression;
-  any other mismatch there is real.
+  in-memory name is copied verbatim from its source; `VPattern::ParseNodePoint()`
+  (`src/app/seamly2d/xml/vpattern.cpp`) does the same when *reloading* a saved piece, so the
+  collision reappears on every load, not just within the process that first created it.
+  `NameResolver::idForName()` had no preference between a `Draw::Calculation` object and a
+  `Draw::Modeling` clone that happen to share a name, so it silently returned whichever one
+  `QHash`'s per-process-randomized iteration order produced.
+
+  **The fix:** `NameResolver::idForName()` gained a `Draw`-scoped overload
+  (`src/libs/actionlayer/name_resolver.h`/`.cpp`) that filters on `VGObject::getMode()` before
+  ever comparing names -- architecturally unable to match a `Draw::Modeling` clone when
+  `Draw::Calculation` was requested, regardless of whether that clone exists because it was just
+  created in this process or because it was reconstructed while reloading a file. Every
+  calculation-context handler in this action layer (`line_handlers.cpp`,
+  `formula_point_handlers.cpp`, `curve_handlers.cpp`, `cutpoint_handlers.cpp`,
+  `operation_handlers.cpp`, `piece_handlers.cpp`, and `render_handlers.cpp`'s `"highlight"`
+  resolution) now uses it; `pattern.resolveName` deliberately still uses the unscoped overload
+  (see its own code comment for why). A same-scope name collision now throws a proper
+  `Kind::Duplicate` error instead of hitting a release-build-compiled-out `Q_ASSERT_X`, and a
+  cross-scope one throws `Kind::WrongScope`, naming which mode the name was actually found in --
+  both surfaced in `pattern.dump`/action-result JSON as `"kind"` and (for `WrongScope`)
+  `"foundInScope"` fields. **Verified fixed:** case 03 now produces byte-identical
+  `rectangle.val` output across repeated runs against the same seed file, and the regenerated
+  `rectangle.val` was confirmed to reload cleanly through `actiond`'s own real
+  `VPattern::Parse()` path (the same parser Seamly2D's interactive GUI uses) with no error. See
+  the `FOUND AND FIXED` comment at the top of `src/libs/actionlayer/handlers/piece_handlers.h`
+  for the full writeup, and `src/test/ActionLayerTest/tst_name_resolver.cpp`'s three
+  `testScopedLookup*` slots for the regression tests that would have caught this before it ever
+  reached a golden file. `golden_diff.py` also gained a standalone structural check
+  (`check_calculation_references()`) that independently catches this exact bug class -- a
+  `<calculation>` element referencing an id not yet defined by an earlier `<calculation>` element
+  -- without needing Seamly2D itself available to try reopening the file.
 - **No edit-in-place or delete action exists yet** for any object type (points, lines, pieces,
   ...) -- see "Case 3's edit-vs-rebuild choice" above. Flagged as explicit follow-up scope.
 - **`lineType` values are not schema-validated at write time.** `line`/formula-point/curve

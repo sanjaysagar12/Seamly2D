@@ -41,6 +41,14 @@ private slots:
     void testResolveMissingNameThrows(); // idForName() throws ActionResolverError, with the offending name and known names attached.
     void testReverseLookup();            // nameForId() round-trips correctly against idForName().
     void testResolveTypedTemplate();     // resolveTyped<VPointF>() returns a valid, correctly-typed shared pointer.
+
+    // Regression tests for the piece-node-clone name collision bug (tests/actionlayer/cases/
+    // 03_import_l_shape_to_rectangle originally reproduced this as a saved pattern file that
+    // failed to reopen in Seamly2D -- see name_resolver.h's own "FOUND AND PARTIALLY FIXED"
+    // comment and tests/actionlayer/README.md's "Known gaps" section for the full story).
+    void testScopedLookupPrefersCalculationOverModelingClone(); // The core fix: Draw::Calculation- and Draw::Modeling-scoped lookups each find their own object when both share a name.
+    void testScopedLookupThrowsWrongScopeForModelingOnlyName(); // A Draw::Calculation-scoped lookup for a name that exists only as Draw::Modeling throws Kind::WrongScope, naming the mode it was actually found in.
+    void testScopedLookupThrowsDuplicateForSameScopeCollision(); // Two objects in the SAME scope sharing a name throws Kind::Duplicate (the real data-integrity problem the old, compiled-out Q_ASSERT_X used to silently miss).
 };
 
 #endif // TST_NAME_RESOLVER_H // End of include guard started above.

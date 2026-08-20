@@ -9,7 +9,7 @@
 # monolithic Seamly2DTests binary, since that binary's registration point
 # (qttestmainlambda.cpp) is outside actionlayer's phase-1 change scope.
 
-QT       += core testlib gui widgets printsupport xml
+QT       += core testlib gui widgets printsupport xml multimedia
 
 TARGET = ActionLayerTest
 
@@ -69,6 +69,26 @@ DISTFILES += \
 
 include(warnings.pri)
 
+# Phase 8: piece_handlers.cpp/operation_handlers.cpp (src/libs/actionlayer/handlers/) now link
+# against PatternPieceTool/UnionTool, which pull the same fuller vtools/vwidgets dependency chain
+# actiond.pro (src/app/actiond/actiond.pro) already needed -- Tools (CheckableMessageBox),
+# VFormat (MeasurementDoc, already used by tst_action_engine_batches.cpp's measurements.* cases),
+# VPropertyExplorer, and the Qt Multimedia module (QSoundEffect, referenced from
+# pattern_piece_dialog.obj even though nothing in this test suite triggers a sound effect at
+# runtime -- the *link*-time reference exists regardless). Added here, mirroring actiond.pro's own
+# block-for-block library list and order exactly, once Phase 8's own handlers started pulling
+# these symbols in via -lactionlayer -> -lvtools; this test target never needed them before.
+
+#Tools static library (depend on VWidgets, VMisc, VPatternDB) -- provides CheckableMessageBox,
+# which VAbstractTool::ConfirmDeletion() (vtools) links against.
+unix|win32: LIBS += -L$$OUT_PWD/../../libs/tools/$${DESTDIR}/ -ltools
+
+INCLUDEPATH += $$PWD/../../libs/tools
+DEPENDPATH += $$PWD/../../libs/tools
+
+win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/tools/$${DESTDIR}/tools.lib
+else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/tools/$${DESTDIR}/libtools.a
+
 #VTools static library (depend on VWidgets, VMisc, VPatternDB)
 unix|win32: LIBS += -L$$OUT_PWD/../../libs/vtools/$${DESTDIR}/ -lvtools
 
@@ -86,6 +106,15 @@ DEPENDPATH += $$PWD/../../libs/vwidgets
 
 win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vwidgets/$${DESTDIR}/vwidgets.lib
 else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vwidgets/$${DESTDIR}/libvwidgets.a
+
+# VFormat static library (depend on VPatternDB, IFC) -- provides MeasurementDoc.
+unix|win32: LIBS += -L$$OUT_PWD/../../libs/vformat/$${DESTDIR}/ -lvformat
+
+INCLUDEPATH += $$PWD/../../libs/vformat
+DEPENDPATH += $$PWD/../../libs/vformat
+
+win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vformat/$${DESTDIR}/vformat.lib
+else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vformat/$${DESTDIR}/libvformat.a
 
 #VPatternDB static library (depend on vgeometry, vmisc, VLayout)
 unix|win32: LIBS += -L$$OUT_PWD/../../libs/vpatterndb/$${DESTDIR} -lvpatterndb
@@ -140,6 +169,15 @@ DEPENDPATH += $${PWD}/../../libs/qmuparser
 
 win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/qmuparser/$${DESTDIR}/qmuparser.lib
 else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/qmuparser/$${DESTDIR}/libqmuparser.a
+
+# VPropertyExplorer library (depend on: vtools' property-browser dialogs)
+unix|win32: LIBS += -L$${OUT_PWD}/../../libs/vpropertyexplorer/$${DESTDIR} -lvpropertyexplorer
+
+INCLUDEPATH += $${PWD}/../../libs/vpropertyexplorer
+DEPENDPATH += $${PWD}/../../libs/vpropertyexplorer
+
+win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vpropertyexplorer/$${DESTDIR}/vpropertyexplorer.lib
+else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vpropertyexplorer/$${DESTDIR}/libvpropertyexplorer.a
 
 #ActionLayer static library (depends on vpatterndb, vgeometry, ifc, vmisc)
 unix|win32: LIBS += -L$$OUT_PWD/../../libs/actionlayer/$${DESTDIR}/ -lactionlayer

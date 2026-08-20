@@ -74,6 +74,17 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a point").arg(fieldName, name);
         }
+        // Defense-in-depth: id was resolved via NameResolver::idForName(..., Draw::Calculation)
+        // above, which should already make a non-Calculation object impossible here -- but this
+        // is a cheap, load-bearing check against a future call site that reintroduces the
+        // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+        // same-named Draw::Modeling piece-node clone can otherwise be resolved instead -- the
+        // exact bug this whole file's node-cloning logic was written around).
+        if (obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context point")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
         return QString();
     }
 
@@ -114,7 +125,7 @@ namespace
                 outError = QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op);
                 return false;
             }
-            const quint32 id = NameResolver::idForName(name, data); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
+            const quint32 id = NameResolver::idForName(name, data, Draw::Calculation); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
             const QString typeError = checkIsPoint(data, id, QStringLiteral("nodes"), name);
             if (!typeError.isEmpty())
             {
@@ -160,7 +171,7 @@ namespace
                 outError = QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op);
                 return false;
             }
-            const quint32 pointId = NameResolver::idForName(name, data); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
+            const quint32 pointId = NameResolver::idForName(name, data, Draw::Calculation); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
             const QString typeError = checkIsPoint(data, pointId, QStringLiteral("nodes"), name);
             if (!typeError.isEmpty())
             {
@@ -169,21 +180,25 @@ namespace
             }
 
             const quint32 nodeId = VAbstractTool::CreateNode<VPointF>(data, pointId);
-            // CreateNode<VPointF>() copy-constructs the clone from its source (VGObject's copy
-            // constructor copies every field, including name()), so without this rename the
-            // clone and its source both answer to the same name -- and NameResolver::idForName()
-            // (name_resolver.cpp), a plain linear scan with no preference between them, can then
-            // resolve a later action's reference to either one depending on VContainer::
-            // DataGObjects()' QHash iteration order, which Qt randomizes per process for
-            // collision resistance. Reproduced as genuine run-to-run non-determinism while
-            // authoring tests/actionlayer/cases/03_import_l_shape_to_rectangle (the same
-            // "basePoint": "B" JSON action resolved to a different object across separate runs).
-            // A modeling-type clone's name is never written to the saved XML in the first place
-            // (see e.g. cases/01_square/expected/square.val's <point type="modeling"> elements,
-            // which carry no "name" attribute at all) -- only NameResolver's in-memory lookup
-            // reads it -- so renaming the clone here is a purely action-layer-local fix with zero
-            // effect on the saved pattern file, and resolves the ambiguity deterministically:
-            // every legitimate, caller-supplied point name now names only the real object.
+            // Defense-in-depth, kept intentionally even though NameResolver::idForName()'s scoped
+            // (Draw::Calculation) overload -- used everywhere in this action layer that resolves a
+            // calculation-context name, including the lookup just above -- now makes this rename
+            // unnecessary on its own: a scoped lookup filters on getMode() before ever comparing
+            // names, so it architecturally cannot match a Draw::Modeling clone regardless of what
+            // that clone is named. This rename predates the scoped overload (originally the *only*
+            // fix, for the in-session case only -- see git history / name_resolver.h's own
+            // "FOUND AND PARTIALLY FIXED" comment for the full story of how the scoped overload
+            // superseded it, including for the reload case this rename never reached). Left in
+            // place as a second, independent safety net: CreateNode<VPointF>() copy-constructs the
+            // clone from its source (VGObject's copy constructor copies every field, including
+            // name()), so without this rename the clone would still answer to the same name as its
+            // source for any *unscoped* NameResolver::idForName() call elsewhere in the codebase
+            // (e.g. "pattern.resolveName", deliberately unscoped -- see
+            // pattern_resolve_name_handler.cpp) or any future one that forgets to scope. A
+            // modeling-type clone's name is never written to the saved XML in the first place (see
+            // e.g. cases/01_square/expected/square.val's <point type="modeling"> elements, which
+            // carry no "name" attribute at all), so this remains a purely action-layer-local,
+            // zero-effect-on-the-saved-file change either way.
             if (QSharedPointer<VGObject> clone = data->GetGObject(nodeId))
             {
                 clone->setName(QStringLiteral("__pieceNode_%1").arg(nodeId));
@@ -385,7 +400,7 @@ ActionResult handlePieceAddAnchorPoint(const QJsonObject &args, const ActionCont
         return ActionResult::failure(QStringLiteral("piece.addAnchorPoint: context is missing a document or data container"));
     }
 
-    const quint32 pointId = NameResolver::idForName(pointName, data);
+    const quint32 pointId = NameResolver::idForName(pointName, data, Draw::Calculation);
     const QString typeError = checkIsPoint(data, pointId, QStringLiteral("point"), pointName);
     if (!typeError.isEmpty())
     {

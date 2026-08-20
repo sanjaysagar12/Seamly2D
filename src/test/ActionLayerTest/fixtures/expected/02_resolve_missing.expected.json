@@ -6,6 +6,7 @@
             "value": null,
             "error": {
                 "type": "nameResolution",
+                "kind": "notFound",
                 "message": "Unknown object name: A9",
                 "name": "A9",
                 "knownNames": ["A", "A1", "A2"]

@@ -65,6 +65,16 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a point").arg(fieldName, name);
         }
+        // Defense-in-depth: id was resolved via NameResolver::idForName(..., Draw::Calculation)
+        // above, which should already make a non-Calculation object impossible here -- but this
+        // is a cheap, load-bearing check against a future call site that reintroduces the
+        // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+        // same-named Draw::Modeling piece-node clone can otherwise be resolved instead).
+        if (obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context point")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
         return QString(); // Empty string signals "no problem found".
     }
 
@@ -199,7 +209,7 @@ ActionResult handleEndLine(const QJsonObject &args, const ActionContext &ctx)
     // Throws ActionResolverError on an unknown name; deliberately not caught here so
     // ActionEngine::run()'s existing Phase 4 catch clause serializes it into the same structured
     // {"type":"nameResolution",...} shape every other handler's unresolved name already produces.
-    const quint32 basePointId = NameResolver::idForName(basePointName, data);
+    const quint32 basePointId = NameResolver::idForName(basePointName, data, Draw::Calculation);
     const QString typeError = checkIsPoint(data, basePointId, QStringLiteral("basePoint"), basePointName);
     if (!typeError.isEmpty())
     {
@@ -267,8 +277,8 @@ ActionResult handleAlongLine(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("alongLine: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstId = NameResolver::idForName(firstName, data);   // Uncaught by design; see handleEndLine()'s comment.
-    const quint32 secondId = NameResolver::idForName(secondName, data); // Uncaught by design; see handleEndLine()'s comment.
+    const quint32 firstId = NameResolver::idForName(firstName, data, Draw::Calculation);   // Uncaught by design; see handleEndLine()'s comment.
+    const quint32 secondId = NameResolver::idForName(secondName, data, Draw::Calculation); // Uncaught by design; see handleEndLine()'s comment.
 
     const QString firstTypeError = checkIsPoint(data, firstId, QStringLiteral("firstPoint"), firstName);
     if (!firstTypeError.isEmpty())
@@ -334,8 +344,8 @@ ActionResult handleNormal(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("normal: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstId = NameResolver::idForName(firstName, data);
-    const quint32 secondId = NameResolver::idForName(secondName, data);
+    const quint32 firstId = NameResolver::idForName(firstName, data, Draw::Calculation);
+    const quint32 secondId = NameResolver::idForName(secondName, data, Draw::Calculation);
 
     const QString firstTypeError = checkIsPoint(data, firstId, QStringLiteral("firstPoint"), firstName);
     if (!firstTypeError.isEmpty())
@@ -407,9 +417,9 @@ ActionResult handleBisector(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("bisector: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstId = NameResolver::idForName(firstName, data);
-    const quint32 secondId = NameResolver::idForName(secondName, data);
-    const quint32 thirdId = NameResolver::idForName(thirdName, data);
+    const quint32 firstId = NameResolver::idForName(firstName, data, Draw::Calculation);
+    const quint32 secondId = NameResolver::idForName(secondName, data, Draw::Calculation);
+    const quint32 thirdId = NameResolver::idForName(thirdName, data, Draw::Calculation);
 
     const QString firstTypeError = checkIsPoint(data, firstId, QStringLiteral("firstPoint"), firstName);
     if (!firstTypeError.isEmpty())
@@ -481,9 +491,9 @@ ActionResult handleShoulderPoint(const QJsonObject &args, const ActionContext &c
             QStringLiteral("shoulderPoint: context is missing a scene, document, or data container"));
     }
 
-    const quint32 p1LineId = NameResolver::idForName(p1LineName, data);
-    const quint32 p2LineId = NameResolver::idForName(p2LineName, data);
-    const quint32 pShoulderId = NameResolver::idForName(pShoulderName, data);
+    const quint32 p1LineId = NameResolver::idForName(p1LineName, data, Draw::Calculation);
+    const quint32 p2LineId = NameResolver::idForName(p2LineName, data, Draw::Calculation);
+    const quint32 pShoulderId = NameResolver::idForName(pShoulderName, data, Draw::Calculation);
 
     const QString p1TypeError = checkIsPoint(data, p1LineId, QStringLiteral("p1Line"), p1LineName);
     if (!p1TypeError.isEmpty())
@@ -556,10 +566,10 @@ ActionResult handleLineIntersect(const QJsonObject &args, const ActionContext &c
             QStringLiteral("lineIntersect: context is missing a scene, document, or data container"));
     }
 
-    const quint32 p1Line1Id = NameResolver::idForName(p1Line1Name, data);
-    const quint32 p2Line1Id = NameResolver::idForName(p2Line1Name, data);
-    const quint32 p1Line2Id = NameResolver::idForName(p1Line2Name, data);
-    const quint32 p2Line2Id = NameResolver::idForName(p2Line2Name, data);
+    const quint32 p1Line1Id = NameResolver::idForName(p1Line1Name, data, Draw::Calculation);
+    const quint32 p2Line1Id = NameResolver::idForName(p2Line1Name, data, Draw::Calculation);
+    const quint32 p1Line2Id = NameResolver::idForName(p1Line2Name, data, Draw::Calculation);
+    const quint32 p2Line2Id = NameResolver::idForName(p2Line2Name, data, Draw::Calculation);
 
     const QString p1Line1TypeError = checkIsPoint(data, p1Line1Id, QStringLiteral("p1Line1"), p1Line1Name);
     if (!p1Line1TypeError.isEmpty())

@@ -61,6 +61,22 @@ namespace
         return error;
     }
 
+    // Defense-in-depth: every id passed here was resolved via NameResolver::idForName(...,
+    // Draw::Calculation), which should already make a non-Calculation object impossible -- but
+    // this is a cheap, load-bearing check against a future call site that reintroduces the
+    // unscoped idForName() overload by mistake (see name_resolver.h's own comment on why a
+    // same-named Draw::Modeling piece-node clone can otherwise be resolved instead). Shared by
+    // every type-check helper below so the check itself is written once.
+    QString checkIsCalculationScope(const QSharedPointer<VGObject> &obj, const QString &fieldName, const QString &name)
+    {
+        if (!obj.isNull() && obj->getMode() != Draw::Calculation)
+        {
+            return QStringLiteral("\"%1\" (\"%2\") resolved to a %3 object, not a calculation-context object")
+                .arg(fieldName, name, NameResolver::drawModeToString(obj->getMode()));
+        }
+        return QString();
+    }
+
     QString checkGOType(const VContainer *data, quint32 id, GOType expected, const QString &expectedName,
                         const QString &fieldName, const QString &name)
     {
@@ -69,7 +85,7 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a %3").arg(fieldName, name, expectedName);
         }
-        return QString();
+        return checkIsCalculationScope(obj, fieldName, name);
     }
 
     bool isCurveType(GOType type)
@@ -91,7 +107,7 @@ namespace
             return QStringLiteral("\"%1\" (\"%2\") does not name a spline/splinePath/cubicBezier/cubicBezierPath curve")
                 .arg(fieldName, name);
         }
-        return QString();
+        return checkIsCalculationScope(obj, fieldName, name);
     }
 
     // "curve" here accepts any curve type at all (used by curveIntersectAxis/pointOfIntersectionCurves,
@@ -103,7 +119,7 @@ namespace
         {
             return QStringLiteral("\"%1\" (\"%2\") does not name a curve").arg(fieldName, name);
         }
-        return QString();
+        return checkIsCalculationScope(obj, fieldName, name);
     }
 
     QString checkIsPoint(const VContainer *data, quint32 id, const QString &fieldName, const QString &name)
@@ -280,7 +296,7 @@ ActionResult handleCutSpline(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("cutSpline: context is missing a scene, document, or data container"));
     }
 
-    const quint32 curveId = NameResolver::idForName(curveName, data);
+    const quint32 curveId = NameResolver::idForName(curveName, data, Draw::Calculation);
     const QString typeError = checkIsCubicBezierCurve(data, curveId, QStringLiteral("curve"), curveName);
     if (!typeError.isEmpty())
     {
@@ -339,7 +355,7 @@ ActionResult handleCutArc(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("cutArc: context is missing a scene, document, or data container"));
     }
 
-    const quint32 arcId = NameResolver::idForName(arcName, data);
+    const quint32 arcId = NameResolver::idForName(arcName, data, Draw::Calculation);
     const QString typeError = checkIsArc(data, arcId, QStringLiteral("arc"), arcName);
     if (!typeError.isEmpty())
     {
@@ -392,8 +408,8 @@ ActionResult handlePointOfIntersectionArcs(const QJsonObject &args, const Action
             QStringLiteral("pointOfIntersectionArcs: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstArcId = NameResolver::idForName(firstArcName, data);
-    const quint32 secondArcId = NameResolver::idForName(secondArcName, data);
+    const quint32 firstArcId = NameResolver::idForName(firstArcName, data, Draw::Calculation);
+    const quint32 secondArcId = NameResolver::idForName(secondArcName, data, Draw::Calculation);
     const QString firstTypeError = checkIsArc(data, firstArcId, QStringLiteral("firstArc"), firstArcName);
     if (!firstTypeError.isEmpty())
     {
@@ -460,8 +476,8 @@ ActionResult handlePointOfIntersectionCircles(const QJsonObject &args, const Act
             QStringLiteral("pointOfIntersectionCircles: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstCenterId = NameResolver::idForName(firstCenterName, data);
-    const quint32 secondCenterId = NameResolver::idForName(secondCenterName, data);
+    const quint32 firstCenterId = NameResolver::idForName(firstCenterName, data, Draw::Calculation);
+    const quint32 secondCenterId = NameResolver::idForName(secondCenterName, data, Draw::Calculation);
     const QString firstTypeError = checkIsPoint(data, firstCenterId, QStringLiteral("firstCircleCenter"), firstCenterName);
     if (!firstTypeError.isEmpty())
     {
@@ -526,8 +542,8 @@ ActionResult handlePointOfIntersectionCurves(const QJsonObject &args, const Acti
             QStringLiteral("pointOfIntersectionCurves: context is missing a scene, document, or data container"));
     }
 
-    const quint32 firstCurveId = NameResolver::idForName(firstCurveName, data);
-    const quint32 secondCurveId = NameResolver::idForName(secondCurveName, data);
+    const quint32 firstCurveId = NameResolver::idForName(firstCurveName, data, Draw::Calculation);
+    const quint32 secondCurveId = NameResolver::idForName(secondCurveName, data, Draw::Calculation);
     const QString firstTypeError = checkIsAnyCurve(data, firstCurveId, QStringLiteral("firstCurve"), firstCurveName);
     if (!firstTypeError.isEmpty())
     {
@@ -599,8 +615,8 @@ ActionResult handleCurveIntersectAxis(const QJsonObject &args, const ActionConte
             QStringLiteral("curveIntersectAxis: context is missing a scene, document, or data container"));
     }
 
-    const quint32 basePointId = NameResolver::idForName(basePointName, data);
-    const quint32 curveId = NameResolver::idForName(curveName, data);
+    const quint32 basePointId = NameResolver::idForName(basePointName, data, Draw::Calculation);
+    const quint32 curveId = NameResolver::idForName(curveName, data, Draw::Calculation);
     const QString baseTypeError = checkIsPoint(data, basePointId, QStringLiteral("basePoint"), basePointName);
     if (!baseTypeError.isEmpty())
     {
@@ -664,8 +680,8 @@ ActionResult handlePointFromCircleAndTangent(const QJsonObject &args, const Acti
             QStringLiteral("pointFromCircleAndTangent: context is missing a scene, document, or data container"));
     }
 
-    const quint32 circleCenterId = NameResolver::idForName(circleCenterName, data);
-    const quint32 tangentPointId = NameResolver::idForName(tangentPointName, data);
+    const quint32 circleCenterId = NameResolver::idForName(circleCenterName, data, Draw::Calculation);
+    const quint32 tangentPointId = NameResolver::idForName(tangentPointName, data, Draw::Calculation);
     const QString centerTypeError = checkIsPoint(data, circleCenterId, QStringLiteral("circleCenter"), circleCenterName);
     if (!centerTypeError.isEmpty())
     {
@@ -729,8 +745,8 @@ ActionResult handlePointFromArcAndTangent(const QJsonObject &args, const ActionC
             QStringLiteral("pointFromArcAndTangent: context is missing a scene, document, or data container"));
     }
 
-    const quint32 arcId = NameResolver::idForName(arcName, data);
-    const quint32 tangentPointId = NameResolver::idForName(tangentPointName, data);
+    const quint32 arcId = NameResolver::idForName(arcName, data, Draw::Calculation);
+    const quint32 tangentPointId = NameResolver::idForName(tangentPointName, data, Draw::Calculation);
     const QString arcTypeError = checkIsArc(data, arcId, QStringLiteral("arc"), arcName);
     if (!arcTypeError.isEmpty())
     {
@@ -793,10 +809,10 @@ ActionResult handleTriangle(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("triangle: context is missing a scene, document, or data container"));
     }
 
-    const quint32 axisP1Id = NameResolver::idForName(axisP1Name, data);
-    const quint32 axisP2Id = NameResolver::idForName(axisP2Name, data);
-    const quint32 firstPointId = NameResolver::idForName(firstPointName, data);
-    const quint32 secondPointId = NameResolver::idForName(secondPointName, data);
+    const quint32 axisP1Id = NameResolver::idForName(axisP1Name, data, Draw::Calculation);
+    const quint32 axisP2Id = NameResolver::idForName(axisP2Name, data, Draw::Calculation);
+    const quint32 firstPointId = NameResolver::idForName(firstPointName, data, Draw::Calculation);
+    const quint32 secondPointId = NameResolver::idForName(secondPointName, data, Draw::Calculation);
 
     for (const auto &pair : { std::make_pair(axisP1Id, axisP1Name), std::make_pair(axisP2Id, axisP2Name),
                               std::make_pair(firstPointId, firstPointName), std::make_pair(secondPointId, secondPointName) })
@@ -850,9 +866,9 @@ ActionResult handleHeight(const QJsonObject &args, const ActionContext &ctx)
         return ActionResult::failure(QStringLiteral("height: context is missing a scene, document, or data container"));
     }
 
-    const quint32 basePointId = NameResolver::idForName(basePointName, data);
-    const quint32 p1LineId = NameResolver::idForName(p1LineName, data);
-    const quint32 p2LineId = NameResolver::idForName(p2LineName, data);
+    const quint32 basePointId = NameResolver::idForName(basePointName, data, Draw::Calculation);
+    const quint32 p1LineId = NameResolver::idForName(p1LineName, data, Draw::Calculation);
+    const quint32 p2LineId = NameResolver::idForName(p2LineName, data, Draw::Calculation);
 
     for (const auto &pair : { std::make_pair(basePointId, basePointName), std::make_pair(p1LineId, p1LineName),
                               std::make_pair(p2LineId, p2LineName) })

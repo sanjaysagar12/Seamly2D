@@ -24,7 +24,7 @@
 
 #include "name_resolver.h" // Brings in NameResolver and ActionResolverError, both implemented in this file.
 
-#include "../vgeometry/vgobject.h" // Brings in VGObject::name(), read from every entry in the scan below.
+#include "../vgeometry/vgobject.h" // Brings in VGObject::name()/getMode(), read from every entry in the scan below.
 
 namespace
 {
@@ -49,40 +49,78 @@ namespace
 
         return names; // Return the collected snapshot by value.
     }
-}
 
-// Linear scan over data->DataGObjects() comparing each object's name() to the requested name.
-// See the class comment in name_resolver.h for why this is deliberately not cached.
-quint32 NameResolver::idForName(const QString &name, const VContainer *data)
-{
-    const QHash<quint32, QSharedPointer<VGObject>> *gObjects = data->DataGObjects(); // Every geometry object, keyed by id.
-
-    bool found = false;   // Tracks whether a match has already been recorded, for the uniqueness assert below.
-    quint32 foundId = 0;  // The id of the match, once found.
-
-    if (gObjects != nullptr) // DataGObjects() can return nullptr before a pattern has been parsed.
+    // Shared scan core for both idForName() overloads below. `requiredMode` is a pointer so the
+    // unscoped overload can pass nullptr ("match any mode") without duplicating the whole loop;
+    // the scoped overload passes the address of its own by-value Draw argument.
+    //
+    // On a within-scope duplicate, throws immediately (Kind::Duplicate) rather than returning --
+    // this replaces the old Q_ASSERT_X, which was compiled to nothing in this project's release
+    // build (V_NO_ASSERT/NDEBUG; see actionlayer.pro) and so never actually caught anything outside
+    // a debug build. VContainer::uniqueNames (vcontainer.cpp) enforces name uniqueness *within* a
+    // single Draw mode for every object created through the normal Create()/AddGObject() path, so a
+    // same-mode duplicate here is a genuine data-integrity problem, not a normal, expected
+    // situation the way a *cross*-mode collision (a calculation point vs. its own piece-node
+    // clone) now is.
+    quint32 scanForName(const QString &name, const VContainer *data, const Draw *requiredMode)
     {
-        for (auto it = gObjects->constBegin(); it != gObjects->constEnd(); ++it) // Walk every entry in the hash.
+        const QHash<quint32, QSharedPointer<VGObject>> *gObjects = data->DataGObjects(); // Every geometry object, keyed by id.
+
+        bool found = false;          // A same-scope match has been recorded.
+        quint32 foundId = 0;         // Its id, once found.
+        bool foundWrongScope = false; // A match exists, but only outside requiredMode (scoped overload only).
+        Draw wrongScopeMode = Draw::Calculation; // Meaningless unless foundWrongScope is true.
+
+        if (gObjects != nullptr) // DataGObjects() can return nullptr before a pattern has been parsed.
         {
-            if (!it.value().isNull() && it.value()->name() == name) // Skip null entries; compare the rest by name.
+            for (auto it = gObjects->constBegin(); it != gObjects->constEnd(); ++it) // Walk every entry in the hash.
             {
-                // VContainer::uniqueNames (vcontainer.cpp) enforces name uniqueness across the whole
-                // container for every object created through the normal Create()/AddGObject() path,
-                // so finding a second match here means a bug in this scan or in that invariant, not a
-                // real state production code needs to handle gracefully -- hence an assert, not a branch.
-                Q_ASSERT_X(!found, "NameResolver::idForName", "duplicate object name found in DataGObjects()");
-                found = true;      // Record that a match now exists, for the assert above on any later iteration.
-                foundId = it.key(); // The hash key is the object's own id.
+                if (it.value().isNull() || it.value()->name() != name) // Skip null entries and non-matching names.
+                {
+                    continue;
+                }
+
+                if (requiredMode == nullptr || it.value()->getMode() == *requiredMode) // In scope (or scope-agnostic).
+                {
+                    if (found) // A second in-scope match: genuine ambiguity, not routable around by the caller.
+                    {
+                        throw ActionResolverError(ActionResolverError::Kind::Duplicate, name, collectKnownNames(data), QString());
+                    }
+                    found = true;
+                    foundId = it.key(); // The hash key is the object's own id.
+                }
+                else if (!foundWrongScope) // First out-of-scope match; remembered only for the WrongScope error path below.
+                {
+                    foundWrongScope = true;
+                    wrongScopeMode = it.value()->getMode();
+                }
             }
         }
-    }
 
-    if (!found) // No object in the container carries this name.
-    {
-        throw ActionResolverError(name, collectKnownNames(data)); // Structured, self-correcting failure for an automated caller.
-    }
+        if (!found) // No in-scope object carries this name.
+        {
+            if (requiredMode != nullptr && foundWrongScope) // Scoped lookup, and the name exists -- just not here.
+            {
+                throw ActionResolverError(ActionResolverError::Kind::WrongScope, name, collectKnownNames(data),
+                    NameResolver::drawModeToString(wrongScopeMode));
+            }
+            throw ActionResolverError(name, collectKnownNames(data)); // Kind::NotFound: no match in any mode.
+        }
 
-    return foundId; // The (unique) id of the matching object.
+        return foundId; // The (unique, in-scope) id of the matching object.
+    }
+}
+
+// See name_resolver.h for the full contract; matches any Draw mode.
+quint32 NameResolver::idForName(const QString &name, const VContainer *data)
+{
+    return scanForName(name, data, nullptr);
+}
+
+// See name_resolver.h for the full contract; matches only objects in requiredMode.
+quint32 NameResolver::idForName(const QString &name, const VContainer *data, Draw requiredMode)
+{
+    return scanForName(name, data, &requiredMode);
 }
 
 // Linear scan over data->DataGObjects() for the given id; DataGObjects() is already keyed by id,
@@ -101,4 +139,16 @@ QString NameResolver::nameForId(quint32 id, const VContainer *data)
     // "name" field so ActionEngine's single catch clause can serialize both failure modes the same
     // way. An id has no notion of "known good names" to suggest, so that list is left empty here.
     throw ActionResolverError(QString::number(id), QStringList());
+}
+
+// See name_resolver.h for the full contract.
+QString NameResolver::drawModeToString(Draw mode)
+{
+    switch (mode)
+    {
+        case Draw::Calculation: return QStringLiteral("calculation");
+        case Draw::Modeling:    return QStringLiteral("modeling");
+        case Draw::Layout:      return QStringLiteral("layout");
+    }
+    return QStringLiteral("unknown"); // Defensive: every current Draw enumerator is handled above; never reached.
 }
