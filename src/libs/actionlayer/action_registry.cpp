@@ -33,6 +33,10 @@
 #include "handlers/line_handlers.h"                 // Brings in handleLine(), registered under "line".
 #include "handlers/formula_point_handlers.h"        // Brings in the six Phase 6 handle*() functions below (endLine, alongLine, normal, bisector, shoulderPoint, lineIntersect).
 #include "handlers/measurements_sync_handlers.h"    // Brings in the three Phase 7 handle*() functions below (measurements.load, .recompute, .sync).
+#include "handlers/curve_handlers.h"                 // Brings in the seven Phase 8 curve handle*() functions below.
+#include "handlers/cutpoint_handlers.h"               // Brings in the ten Phase 8 cut/intersection point handle*() functions below.
+#include "handlers/operation_handlers.h"              // Brings in the six Phase 8 operation handle*() functions below (move, rotation, mirrorByLine, mirrorByAxis, group, trueDarts).
+#include "handlers/piece_handlers.h"                  // Brings in the five Phase 8 piece.* handle*() functions below.
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -61,6 +65,42 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("measurements.load"), &handleMeasurementsLoad);           // Phase 7: mutating -- swaps the active measurement file, does not recompute geometry.
     registerAction(QStringLiteral("measurements.recompute"), &handleMeasurementsRecompute); // Phase 7: mutating -- re-evaluates every formula and rebuilds geometry.
     registerAction(QStringLiteral("measurements.sync"), &handleMeasurementsSync);           // Phase 7: mutating -- measurements.load immediately followed by measurements.recompute.
+
+    // Phase 8: curve-construction tools.
+    registerAction(QStringLiteral("spline"), &handleSpline);
+    registerAction(QStringLiteral("splinePath"), &handleSplinePath);
+    registerAction(QStringLiteral("cubicBezier"), &handleCubicBezier);
+    registerAction(QStringLiteral("cubicBezierPath"), &handleCubicBezierPath);
+    registerAction(QStringLiteral("arc"), &handleArc);
+    registerAction(QStringLiteral("arcWithLength"), &handleArcWithLength);
+    registerAction(QStringLiteral("ellipticalArc"), &handleEllipticalArc);
+
+    // Phase 8: cut/intersection point tools.
+    registerAction(QStringLiteral("cutSpline"), &handleCutSpline);
+    registerAction(QStringLiteral("cutArc"), &handleCutArc);
+    registerAction(QStringLiteral("pointOfIntersectionArcs"), &handlePointOfIntersectionArcs);
+    registerAction(QStringLiteral("pointOfIntersectionCircles"), &handlePointOfIntersectionCircles);
+    registerAction(QStringLiteral("pointOfIntersectionCurves"), &handlePointOfIntersectionCurves);
+    registerAction(QStringLiteral("curveIntersectAxis"), &handleCurveIntersectAxis);
+    registerAction(QStringLiteral("pointFromCircleAndTangent"), &handlePointFromCircleAndTangent);
+    registerAction(QStringLiteral("pointFromArcAndTangent"), &handlePointFromArcAndTangent);
+    registerAction(QStringLiteral("triangle"), &handleTriangle);
+    registerAction(QStringLiteral("height"), &handleHeight);
+
+    // Phase 8: object-transforming operations + group bookkeeping.
+    registerAction(QStringLiteral("move"), &handleMove);
+    registerAction(QStringLiteral("rotation"), &handleRotation);
+    registerAction(QStringLiteral("mirrorByLine"), &handleMirrorByLine);
+    registerAction(QStringLiteral("mirrorByAxis"), &handleMirrorByAxis);
+    registerAction(QStringLiteral("group"), &handleGroup);
+    registerAction(QStringLiteral("trueDarts"), &handleTrueDarts);
+
+    // Phase 8: pattern-piece assembly.
+    registerAction(QStringLiteral("piece.addPatternPiece"), &handlePieceAddPatternPiece);
+    registerAction(QStringLiteral("piece.addAnchorPoint"), &handlePieceAddAnchorPoint);
+    registerAction(QStringLiteral("piece.internalPath"), &handlePieceInternalPath);
+    registerAction(QStringLiteral("piece.insertNodes"), &handlePieceInsertNodes);
+    registerAction(QStringLiteral("piece.union"), &handlePieceUnion);
 }
 
 // Stores the handler function in the internal map under the given name.

@@ -32,6 +32,7 @@
 #include "../../vgeometry/vgeometrydef.h" // Brings in the GOType enum classified by goTypeToString() below.
 #include "../../ifc/xml/vabstractpattern.h" // Brings in VAbstractPattern::getHistory() (tool-history entries) and the static getTool(id) used below to reach a point's live tool instance.
 #include "../../ifc/xml/vtoolrecord.h"      // Brings in VToolRecord: getId(), getTypeTool(), getDraftBlockName().
+#include "../../ifc/exception/vexception.h" // Brings in VExceptionBadId, thrown by getTool() for a point with no registered tool (Phase 8: move/rotation/mirror destination points).
 #include "../../vmisc/def.h"                // Brings in the Tool enum classified by toolToString() below.
 #include "../../vpatterndb/vformula.h"      // Brings in VFormula/FormulaType, used to read a formula-bearing tool's raw (non-localized) formula string.
 
@@ -188,26 +189,45 @@ ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx
                     // this file's Create()-based tools registers itself under via
                     // VAbstractPattern::AddTool(id, this) -- the identical idiom render_handlers.cpp
                     // already uses to resolve a highlight name's live tool instance.
-                    VDataTool *pointTool = VAbstractPattern::getTool(it.key());
-                    // VToolLinePoint is the common base of endLine/alongLine/normal/bisector/
-                    // shoulderPoint (VToolLineIntersect is not one -- it has no formula at all, so
-                    // this cast simply fails for it, exactly as intended). FormulaType::FromUser
-                    // reverses the ToUser-side translateVariables() round trip VFormula's
-                    // constructor performs, giving back the same non-localized formula string this
-                    // action layer's own endLine/alongLine/normal/bisector/shoulderPoint handlers
-                    // passed into Create() (see formula_point_handlers.cpp), not a GUI-localized one.
-                    if (VToolLinePoint *linePointTool = qobject_cast<VToolLinePoint *>(pointTool))
+                    //
+                    // Phase 8: unlike every Phase 1-7 handler, VToolMove/VToolRotation/
+                    // VToolMirrorByLine/VToolMirrorByAxis (operation_handlers.cpp) create
+                    // destination points that are plain VPointF objects added straight via
+                    // VContainer::AddGObject(), with no individual VDataTool registered at their
+                    // own id (only the *operation* tool itself, at a different id, is registered) --
+                    // a state pattern.dump now has to expect. getTool() throws VExceptionBadId
+                    // (not nullptr) for an id with no registered tool, so that specific, expected
+                    // "no tool for this point" case is caught here and simply skips the
+                    // formulaLength/formulaAngle fields for this point, rather than the exception
+                    // propagating uncaught out of ActionEngine::run() (which only catches
+                    // ActionResolverError) and crashing the whole batch.
+                    try
                     {
-                        entry["formulaLength"] = linePointTool->GetFormulaLength().GetFormula(FormulaType::FromUser);
-
-                        // VToolEndLine is the one tool in this family with a second (angle) formula;
-                        // every other VToolLinePoint subclass either has no angle at all (alongLine,
-                        // bisector, shoulderPoint) or a plain numeric one, not a formula (normal --
-                        // see formula_point_handlers.cpp's handleNormal() comment).
-                        if (VToolEndLine *endLineTool = qobject_cast<VToolEndLine *>(pointTool))
+                        VDataTool *pointTool = VAbstractPattern::getTool(it.key());
+                        // VToolLinePoint is the common base of endLine/alongLine/normal/bisector/
+                        // shoulderPoint (VToolLineIntersect is not one -- it has no formula at all, so
+                        // this cast simply fails for it, exactly as intended). FormulaType::FromUser
+                        // reverses the ToUser-side translateVariables() round trip VFormula's
+                        // constructor performs, giving back the same non-localized formula string this
+                        // action layer's own endLine/alongLine/normal/bisector/shoulderPoint handlers
+                        // passed into Create() (see formula_point_handlers.cpp), not a GUI-localized one.
+                        if (VToolLinePoint *linePointTool = qobject_cast<VToolLinePoint *>(pointTool))
                         {
-                            entry["formulaAngle"] = endLineTool->GetFormulaAngle().GetFormula(FormulaType::FromUser);
+                            entry["formulaLength"] = linePointTool->GetFormulaLength().GetFormula(FormulaType::FromUser);
+
+                            // VToolEndLine is the one tool in this family with a second (angle) formula;
+                            // every other VToolLinePoint subclass either has no angle at all (alongLine,
+                            // bisector, shoulderPoint) or a plain numeric one, not a formula (normal --
+                            // see formula_point_handlers.cpp's handleNormal() comment).
+                            if (VToolEndLine *endLineTool = qobject_cast<VToolEndLine *>(pointTool))
+                            {
+                                entry["formulaAngle"] = endLineTool->GetFormulaAngle().GetFormula(FormulaType::FromUser);
+                            }
                         }
+                    }
+                    catch (const VExceptionBadId &)
+                    {
+                        // No tool registered for this point id -- see the comment above; not an error.
                     }
                 }
 

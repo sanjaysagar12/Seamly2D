@@ -29,6 +29,7 @@
 
 #include "../../vwidgets/vmaingraphicsscene.h" // Brings in the full VMainGraphicsScene definition (a QGraphicsScene) so itemsBoundingRect()/render() are callable.
 #include "../../ifc/xml/vabstractpattern.h"    // Brings in VAbstractPattern::getTool(id), used to look up a highlighted object's live tool instance.
+#include "../../ifc/exception/vexception.h"    // Brings in VExceptionBadId, thrown by getTool() for an id with no registered tool.
 #include "../../vmisc/vabstractapplication.h"  // Brings in the qApp macro and VAbstractApplication::Settings(), mirroring mainwindowsnogui.cpp's export functions.
 #include "../../vmisc/vcommonsettings.h"       // Brings in VCommonSettings::getLabelFont()/getExportQuality(), used exactly as mainwindowsnogui.cpp's exportPNG() etc. do.
 
@@ -251,7 +252,23 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
             continue; // Move on to the next requested name.
         }
 
-        VDataTool *tool = VAbstractPattern::getTool(id); // Look up the live tool instance for this id, if any.
+        // Phase 8: VAbstractPattern::getTool() throws VExceptionBadId (not nullptr) for an id with
+        // no registered tool -- a state that is now reachable for a real, resolved object: e.g. a
+        // VToolMove/VToolRotation/VToolMirrorByLine/VToolMirrorByAxis (operation_handlers.cpp)
+        // destination point is a plain VPointF added via VContainer::AddGObject() with no
+        // individual tool of its own (only the *operation* tool, at a different id, is
+        // registered). The `if (tool == nullptr)` guard below was already dead code even before
+        // Phase 8 (getTool() never returns nullptr), so this try/catch is the actual fix, not the
+        // guard beneath it (kept for clarity/documentation, though unreachable).
+        VDataTool *tool = nullptr;
+        try
+        {
+            tool = VAbstractPattern::getTool(id); // Look up the live tool instance for this id, if any.
+        }
+        catch (const VExceptionBadId &)
+        {
+            tool = nullptr; // No tool registered for this id; handled uniformly by the guard below.
+        }
         if (tool == nullptr) // The id doesn't correspond to a currently-registered tool.
         {
             qWarning() << "render.snapshot: no live tool found for highlight id" << id << "(name" << name << ")"; // Logged, not fatal.

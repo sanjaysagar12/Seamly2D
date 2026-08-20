@@ -99,6 +99,14 @@ namespace ActionHost
         // ui->view->setScene(...); this is that same attachment for actiond's offscreen view.
         sceneView.setScene(&draftScene);
 
+        // Phase 8: same defensive attachment as sceneView/draftScene above, for pieceScene --
+        // PatternPieceTool/InternalPathTool/UnionTool add label/graphics items to pieceScene, and
+        // nothing here ever calls qApp->setSceneView() a second time for it (that accessor tracks
+        // only the single "current" editing view, unrelated to which scenes have >=1 attached
+        // view), so pieceScene needs its own view purely so pieceScene.views() is non-empty.
+        VMainGraphicsView pieceSceneView; // Never shown; exists only so pieceScene.views() is non-empty.
+        pieceSceneView.setScene(&pieceScene);
+
         // QScopedPointer gives doc RAII cleanup on every return path (including the exceptions
         // thrown by setXMLContent()/Parse() below) without a manual try/catch-and-delete.
         QScopedPointer<VPattern> doc(new VPattern(&data, &draftScene, &pieceScene));
@@ -132,7 +140,11 @@ namespace ActionHost
         // tool history into data/doc, via the same vtools Create() factories the GUI editor uses.
         doc->Parse(Document::FullParse);
 
-        ActionContext ctx(&draftScene, doc.data(), &data); // Bundles the trio ActionEngine's handlers read from.
+        // Phase 8: passes pieceScene too, so piece_handlers.cpp's ops (PatternPieceTool,
+        // InternalPathTool, UnionTool, ...) add their graphics items to the same piece-mode scene
+        // VPattern::Parse() itself already populated, exactly mirroring MainWindow's own
+        // draftScene/pieceScene split.
+        ActionContext ctx(&draftScene, doc.data(), &data, &pieceScene); // Bundles the quartet ActionEngine's handlers read from.
         ActionRegistry registry;                            // Auto-registers every built-in handler (read-only and, since Phase 5, mutating).
         ActionEngine engine(registry);                       // Dispatches the script below through that registry.
 

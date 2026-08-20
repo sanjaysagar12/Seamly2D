@@ -13,7 +13,11 @@ SOURCES += \
     $$PWD/handlers/point_handlers.cpp \
     $$PWD/handlers/line_handlers.cpp \
     $$PWD/handlers/formula_point_handlers.cpp \
-    $$PWD/handlers/measurements_sync_handlers.cpp
+    $$PWD/handlers/measurements_sync_handlers.cpp \
+    $$PWD/handlers/curve_handlers.cpp \
+    $$PWD/handlers/cutpoint_handlers.cpp \
+    $$PWD/handlers/operation_handlers.cpp \
+    $$PWD/handlers/piece_handlers.cpp
 
 *msvc*:SOURCES += $$PWD/stable.cpp
 
@@ -33,4 +37,8 @@ HEADERS += \
     $$PWD/handlers/point_handlers.h \
     $$PWD/handlers/line_handlers.h \
     $$PWD/handlers/formula_point_handlers.h \
-    $$PWD/handlers/measurements_sync_handlers.h
+    $$PWD/handlers/measurements_sync_handlers.h \
+    $$PWD/handlers/curve_handlers.h \
+    $$PWD/handlers/cutpoint_handlers.h \
+    $$PWD/handlers/operation_handlers.h \
+    $$PWD/handlers/piece_handlers.h
