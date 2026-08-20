@@ -1,9 +1,0 @@
-{"id": "rect-1", "onError": "abort", "actions": [
-  {"op": "pattern.dump"},
-  {"op": "point.edit", "name": "D", "length": "20", "angle": "90"},
-  {"op": "point.edit", "name": "E", "length": "100"},
-  {"op": "pattern.dump"},
-  {"op": "render.snapshot", "path": "l_to_rectangle.png"},
-  {"op": "session.save", "path": "l_to_rectangle.val"},
-  {"op": "session.close"}
-]}

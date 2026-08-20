@@ -144,8 +144,10 @@ is **empty**. Every action-layer file is new and additive:
 - `src/app/actiond/` — the standalone binary (`main.cpp`, `ActionHost`,
   `PatternSession`, `SessionServer`, `ActiondApplication`).
 - `src/test/ActionLayerTest/` — the C++/QtTest unit suite for the above.
-- `tests/actionlayer/` — the Python/shell integration-test harnesses (see its own
-  `README.md`).
+- `tests/actionlayer/` — the `run_batch` (C++/qmake, `tests/actionlayer/run_batch/`)
+  integration-test harness, driving `actiond` as a subprocess against `scripts/*.json` and
+  diffing its JSON response against `expected/*.expected.json` (see its own `README.md`; wired
+  into `make check` via `src/test/test.pro`'s `ActionLayerBatchTests` entry).
 - `docs/action-layer-schema.md`, this file, and `src/libs/actionlayer/CHANGELOG.md`.
 
 No core Seamly2D file (`src/libs/vtools`, `src/libs/vpatterndb`, `src/libs/vgeometry`,

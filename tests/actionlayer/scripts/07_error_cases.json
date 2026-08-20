@@ -1,0 +1,10 @@
+{
+    "_description": "Error handling: a malformed formula (formulaError), a reference to a nonexistent point name (nameResolution), and an unregistered op name -- asserts each produces a clean, structured JSON failure rather than a crash, and that the process/batch keeps going afterward (the trailing pattern.dump proves the engine is still alive and functional after all three failures).",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "Bad", "basePoint": "A", "length": "1/", "angle": "0" },
+        { "op": "line", "firstPoint": "NoSuchPoint", "secondPoint": "A" },
+        { "op": "not.a.real.op" },
+        { "op": "pattern.dump" }
+    ]
+}

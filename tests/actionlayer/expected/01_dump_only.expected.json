@@ -1,0 +1,15 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                ],
+                "objects": [
+                ]
+            }
+        }
+    ]
+}

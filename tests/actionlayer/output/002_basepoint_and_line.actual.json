@@ -1,1 +1,0 @@
-{"results":[{"error":"","ok":true,"op":"basePoint","value":{"id":1,"name":"A"}},{"error":"","ok":true,"op":"basePoint","value":{"id":2,"name":"B"}},{"error":"","ok":true,"op":"line","value":{"firstPoint":"A","id":3,"secondPoint":"B"}}]}

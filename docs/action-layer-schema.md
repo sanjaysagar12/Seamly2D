@@ -68,8 +68,10 @@ Only the persistent daemon (`SessionServer::processLine()`/`remapResult()`,
 {op,index,status,result,error}],error}` shape shown above. A caller driving one-shot mode should
 read `result.ok` (bool) and `result.error`, not `result.status`; a caller driving the daemon should
 read `result.status` (`"ok"|"error"`) and `result.result`, not `result.value`. See
-`tests/actionlayer/actionlayer-tests/expected/*/response.json` for real one-shot examples and
-`tests/actionlayer/scripts/` for real daemon examples.
+`tests/actionlayer/expected/*.expected.json` for real one-shot-mode examples (the harness at
+`tests/actionlayer/run_batch` drives every `tests/actionlayer/scripts/*.json` case through
+one-shot mode); there is no dedicated example harness for the daemon envelope shape at rest --
+see `src/app/actiond/session_server.cpp`'s own `remapResult()` for the authoritative shape.
 
 ## Error handling
 
@@ -134,7 +136,7 @@ crash:
 formula" dialog and always re-throws `qmu::QmuParserError` instead, which layer 1 above (each
 formula-bearing handler's `runCreate()`) catches into the `formulaError` type. A broken formula is
 therefore always a clean, fast JSON failure -- never a blocking dialog and never a process crash;
-see `tests/actionlayer/actionlayer-tests/fixtures/08_error_bad_formula.json` for a live example.
+see `tests/actionlayer/scripts/07_error_cases.json` for a live example.
 
 ## Read-only introspection
 

@@ -1,8 +1,0 @@
-{
-  "id": "01",
-  "actions": [
-    { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
-    { "op": "pattern.dump" },
-    { "op": "render.snapshot", "path": "snapshot.png", "width": 400, "height": 400 }
-  ]
-}

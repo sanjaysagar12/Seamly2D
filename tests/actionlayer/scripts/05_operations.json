@@ -1,0 +1,15 @@
+{
+    "_description": "Object-transforming operations (Phase 8): move, rotation, and mirrorByAxis, each producing new named objects from an existing source point (source objects are never mutated in place), plus group for pure DOM bookkeeping over existing objects.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "C", "basePoint": "A", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "C" },
+        { "op": "move", "sourceObjects": ["B"], "suffix": "_m", "length": "20", "angle": "0", "rotationAngle": "0" },
+        { "op": "rotation", "sourceObjects": ["B"], "suffix": "_r", "origin": "A", "angle": "45" },
+        { "op": "mirrorByAxis", "sourceObjects": ["C"], "suffix": "_ax", "originPoint": "A", "axisType": "vertical" },
+        { "op": "group", "name": "Notches", "sourceObjects": ["B", "C"] },
+        { "op": "pattern.dump" }
+    ]
+}

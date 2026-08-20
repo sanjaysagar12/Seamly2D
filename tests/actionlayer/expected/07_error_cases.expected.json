@@ -1,0 +1,67 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": {
+                "expr": "1/ ",
+                "message": "Unexpected end of expression at position 3",
+                "op": "endLine",
+                "type": "formulaError"
+            },
+            "ok": false,
+            "op": "endLine",
+            "value": null
+        },
+        {
+            "error": {
+                "kind": "notFound",
+                "knownNames": [
+                    "A"
+                ],
+                "message": "Unknown object name: NoSuchPoint",
+                "name": "NoSuchPoint",
+                "type": "nameResolution"
+            },
+            "ok": false,
+            "op": "line",
+            "value": null
+        },
+        {
+            "error": "Unknown action op: 'not.a.real.op'",
+            "ok": false,
+            "op": "not.a.real.op",
+            "value": null
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    }
+                ]
+            }
+        }
+    ]
+}

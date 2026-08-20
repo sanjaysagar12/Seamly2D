@@ -1,8 +1,0 @@
-{
-  "_comment": "Proves the qApp->patternType() != measurements.Type() guard rejects a multisize file against a pattern whose established type (from this invocation's own --measurements fixtures/measurements_a.smis, an individual file) is Individual -- without crashing. Dumps both before and after, like case 05, so run_tests.sh's check_06 function can confirm no mutation happened either. measurements_multisize.smms is a real sample file (copied from src/app/share/samples/measurements/multisize/gost_man_ru.smms), not hand-written, so this exercises the real MultiSizeConverter/eachKnownNameIsValid() path up to the point the type guard rejects it.",
-  "actions": [
-    { "op": "pattern.dump" },
-    { "op": "measurements.load", "path": "fixtures/measurements_multisize.smms" },
-    { "op": "pattern.dump" }
-  ]
-}

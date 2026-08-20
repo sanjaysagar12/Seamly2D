@@ -1,0 +1,140 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 3,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "arc",
+            "value": {
+                "center": "A",
+                "id": 4,
+                "op": "arc"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "spline",
+            "value": {
+                "id": 5,
+                "op": "spline",
+                "point1": "A",
+                "point4": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 2,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 3,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 4,
+                        "tool": "Arc"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 5,
+                        "tool": "Spline"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "0",
+                        "formulaLength": "100",
+                        "id": 2,
+                        "name": "B",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "id": 4,
+                        "name": "Arc_A_4",
+                        "type": "Arc"
+                    },
+                    {
+                        "id": 5,
+                        "name": "Spl_A_B",
+                        "type": "Spline"
+                    }
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 272.4805021978392,
+                    "width": 468.6943285593725,
+                    "x": -27.741572653860658,
+                    "y": -209.48050219783923
+                },
+                "highlighted": [
+                ],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/04_curves/snapshot.png",
+                "pixelSize": {
+                    "height": 400,
+                    "width": 400
+                },
+                "skippedHighlights": [
+                ],
+                "status": "ok"
+            }
+        }
+    ]
+}

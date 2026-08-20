@@ -1,0 +1,206 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 3,
+                "name": "C",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 4,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 5,
+                "secondPoint": "C"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "move",
+            "value": {
+                "created": [
+                    {
+                        "id": 7,
+                        "name": "B_m"
+                    }
+                ],
+                "op": "move"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "rotation",
+            "value": {
+                "created": [
+                    {
+                        "id": 9,
+                        "name": "B_r"
+                    }
+                ],
+                "op": "rotation"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "mirrorByAxis",
+            "value": {
+                "created": [
+                    {
+                        "id": 11,
+                        "name": "C_ax"
+                    }
+                ],
+                "op": "mirrorByAxis"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "group",
+            "value": {
+                "id": 12,
+                "name": "Notches",
+                "op": "group",
+                "sourceObjects": [
+                    "B",
+                    "C"
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 2,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 3,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 4,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 5,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 6,
+                        "tool": "Move"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 8,
+                        "tool": "Rotation"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 10,
+                        "tool": "MirrorByAxis"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "0",
+                        "formulaLength": "100",
+                        "id": 2,
+                        "name": "B",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "90",
+                        "formulaLength": "100",
+                        "id": 3,
+                        "name": "C",
+                        "type": "Point",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 7,
+                        "name": "B_m",
+                        "type": "Point",
+                        "x": 453.54330708661416,
+                        "y": 0
+                    },
+                    {
+                        "id": 9,
+                        "name": "B_r",
+                        "type": "Point",
+                        "x": 267.25295666893135,
+                        "y": -267.25295666893135
+                    },
+                    {
+                        "id": 11,
+                        "name": "C_ax",
+                        "type": "Point",
+                        "x": -2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    }
+                ]
+            }
+        }
+    ]
+}

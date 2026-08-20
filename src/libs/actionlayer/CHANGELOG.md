@@ -17,6 +17,36 @@ flagged during a docs audit (20 Aug 2026) as a real, still-open gap, not yet
 implemented; noted here as a candidate for a future phase rather than added as a
 side effect of writing this changelog.
 
+## Test harness rebuild (20 Aug 2026)
+
+- Consolidated five overlapping, independently-grown `tests/actionlayer/` test conventions
+  (`actionlayer-tests/`, `cases/`, `phase7_measurements/`, and a flat `scripts/`+`expected/`+
+  `fixtures/` set at the root, driven by a mix of `run_batch.py`, `run_tests.py`,
+  `run_action_tests.sh`, `golden_diff.py`) into one canonical structure: `fixtures/patterns/`,
+  `fixtures/measurements/`, `scripts/`, `expected/`, and a single C++ driver at
+  `tests/actionlayer/run_batch/`.
+- New `run_batch` (`tests/actionlayer/run_batch/run_batch.pro` + `main.cpp`): a small, Qt-Core-only
+  console tool that runs `actiond` as a subprocess per case, diffs its JSON response against a
+  golden file, and checks (but never byte-diffs) any rendered PNG. Supports a single-case CLI
+  (`run_batch <pattern.val> [<measurements>] <actions.json> [--update]`, arguments classified by
+  extension, not position) and a no-argument "run every `scripts/*.json` case" mode. Wired into
+  `src/test/test.pro`'s `SUBDIRS` as `ActionLayerBatchTests`, alongside `ParserTest`/
+  `ActionLayerTest`/etc., so `make check` runs it (the no-argument mode) automatically.
+- Seven new self-contained scripts (`01_dump_only.json` through `07_error_cases.json`) replace
+  every prior phase's own ad hoc script set, each running independently against
+  `fixtures/patterns/blank.val` + `fixtures/measurements/sample.smis`. `piece.union` is
+  deliberately not exercised (still segfaults; see `piece_handlers.h`'s own `KNOWN GAP` comment) --
+  including it in a script wired into `make check` would crash the whole suite instead of failing
+  one case.
+- **Found and fixed a real bug while building this harness:** `pattern.dump`
+  (`pattern_dump_handler.cpp`) walked `VContainer::DataGObjects()` (a `QHash`) directly; `QHash`'s
+  iteration order is randomized per process (Qt's hash-flooding mitigation), so the identical
+  script run twice against the identical fixture produced its `"objects"` array in a different
+  order each time -- a real API-determinism issue (an AI caller reading `pattern.dump` twice would
+  see the object list reorder itself for no reason), not just a test-harness inconvenience. Fixed
+  by sorting the ids before serializing. Verified fixed by running every case in the new suite
+  twice in a row and confirming byte-identical output both times.
+
 ## Phase 10 — Validation, schema, and test harness
 
 - Hardened `ActionEngine`'s error handling: an unregistered `"op"`, a registered op

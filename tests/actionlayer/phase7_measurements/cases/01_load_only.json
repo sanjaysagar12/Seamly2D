@@ -1,7 +1,0 @@
-{
-  "_comment": "Proves measurements.load does NOT recompute geometry. base_pattern.val's A1 was baked with measurements_a.smis (shoulder_length=13cm). This batch loads measurements_b.smis (shoulder_length=20cm, a DIFFERENT value for the same measurement name) but never calls measurements.recompute -- so A1's dumped x must still equal the value computed from the OLD (13cm) formula result, not the new one. Checked by run_tests.sh's check_01 function: pattern.dump's A1.x must equal 491.3385826771654 (ToPixel(130mm, Mm)) even after a successful measurements.load reporting the new file's own measurementsLoaded/type.",
-  "actions": [
-    { "op": "measurements.load", "path": "fixtures/measurements_b.smis" },
-    { "op": "pattern.dump" }
-  ]
-}

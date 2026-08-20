@@ -1,0 +1,6 @@
+{
+    "_description": "Smoke test: pattern.dump against a schema-minimum empty pattern (fixtures/patterns/blank.val) with no mutating actions at all. Proves the read-only introspection path works standalone and that loading blank.val does not itself produce any geometry.",
+    "actions": [
+        { "op": "pattern.dump" }
+    ]
+}

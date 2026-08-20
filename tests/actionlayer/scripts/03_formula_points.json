@@ -1,0 +1,14 @@
+{
+    "_description": "Formula-bearing point tools (Phase 6): endLine with a literal formula, endLine with a measurement-name formula (proving measurement-reactivity -- 'shoulder_length' is looked up from fixtures/measurements/sample.smis, not pre-resolved to a number before being passed through), normal, and alongLine. Every formula field is still a JSON string on the wire even when its value is a plain number, matching the architectural rule that formulas are never pre-resolved by the action layer itself.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "A1", "basePoint": "A", "length": "shoulder_length", "angle": "0" },
+        { "op": "endLine", "name": "A2", "basePoint": "A", "length": "50", "angle": "90" },
+        { "op": "normal", "name": "N", "firstPoint": "A", "secondPoint": "A1", "length": "20", "angle": 0 },
+        { "op": "alongLine", "name": "M", "firstPoint": "A", "secondPoint": "A2", "length": "25" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "A1" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "A2" },
+        { "op": "pattern.dump" },
+        { "op": "render.snapshot", "path": "snapshot.png", "width": 400, "height": 400 }
+    ]
+}

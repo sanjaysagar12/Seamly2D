@@ -48,6 +48,8 @@
 #include <QJsonArray>   // Provides QJsonArray, used to build the "objects" and "history" JSON arrays.
 #include <QJsonObject>  // Provides QJsonObject, used for each per-object/per-history-entry JSON record.
 #include <QSharedPointer> // Provides QSharedPointer and qSharedPointerDynamicCast, used to reach VPointF-specific data.
+#include <QVector>        // Provides QVector, used to sort DataGObjects()'s ids before iterating (see below).
+#include <algorithm>      // Provides std::sort.
 
 // Converts a GOType enumerator to its exact C++ name, so JSON consumers get a stable,
 // machine-readable label instead of a numeric value. Every enumerator is listed explicitly;
@@ -160,16 +162,30 @@ ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx
         const QHash<quint32, QSharedPointer<VGObject>> *gObjects = data->DataGObjects(); // Every geometry object, keyed by id.
         if (gObjects != nullptr) // DataGObjects() can return nullptr before a pattern has been parsed.
         {
-            for (auto it = gObjects->constBegin(); it != gObjects->constEnd(); ++it) // Walk every entry in the hash.
+            // QHash's iteration order is not insertion order and (as of Qt 5's hash-flooding
+            // mitigation) is randomized per process -- walking gObjects directly made pattern.dump's
+            // own "objects" array order differ between two otherwise-identical runs of the same
+            // script against the same fixture, discovered as a genuine golden-file flake while
+            // building tests/actionlayer/run_batch (20 Aug 2026). Sorting by id first makes the
+            // output deterministic without changing which objects are reported.
+            QVector<quint32> ids;
+            ids.reserve(gObjects->size());
+            for (auto it = gObjects->constBegin(); it != gObjects->constEnd(); ++it)
             {
-                const QSharedPointer<VGObject> &obj = it.value(); // The current geometry object, shared-pointer owned.
+                ids.append(it.key());
+            }
+            std::sort(ids.begin(), ids.end());
+
+            for (quint32 id : ids) // Walk every entry in id order.
+            {
+                const QSharedPointer<VGObject> &obj = gObjects->value(id); // The current geometry object, shared-pointer owned.
                 if (obj.isNull()) // Defensive guard: skip a null entry instead of dereferencing it.
                 {
                     continue; // Nothing to report for a null object; move on to the next entry.
                 }
 
                 QJsonObject entry; // Builds this one object's JSON record.
-                entry["id"] = static_cast<qint64>(it.key()); // The object's own id is the DataGObjects() hash key, not getIdObject() (that returns a *parent* id, e.g. an arc's center point, and is 0 for a standalone object).
+                entry["id"] = static_cast<qint64>(id); // The object's own id is the DataGObjects() hash key, not getIdObject() (that returns a *parent* id, e.g. an arc's center point, and is 0 for a standalone object).
                 entry["name"] = obj->name(); // The object's user-assigned or generated name.
                 entry["type"] = goTypeToString(obj->getType()); // Machine-readable geometry-type label.
 
@@ -203,7 +219,7 @@ ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx
                     // ActionResolverError) and crashing the whole batch.
                     try
                     {
-                        VDataTool *pointTool = VAbstractPattern::getTool(it.key());
+                        VDataTool *pointTool = VAbstractPattern::getTool(id);
                         // VToolLinePoint is the common base of endLine/alongLine/normal/bisector/
                         // shoulderPoint (VToolLineIntersect is not one -- it has no formula at all, so
                         // this cast simply fails for it, exactly as intended). FormulaType::FromUser

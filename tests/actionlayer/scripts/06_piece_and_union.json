@@ -1,0 +1,19 @@
+{
+    "_description": "Pattern-piece assembly (Phase 8): builds a closed 100x100 square outline and wraps it in a piece (piece.addPatternPiece), attaches a label anchor (piece.addAnchorPoint), and adds a diagonal internal path (piece.internalPath).",
+    "_note": "piece.union is deliberately NOT exercised here. It reproducibly segfaults inside VToolUnion (see docs/action-layer-schema.md's 'piece.union' entry and src/libs/actionlayer/handlers/piece_handlers.h's own KNOWN GAP comment) -- calling it from a script wired into 'make check' would crash the whole test run instead of failing one case cleanly. This is a documented, deliberate coverage gap, not an oversight; remove this note and add piece.union coverage once that crash is root-caused and fixed.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "C", "basePoint": "B", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "D", "basePoint": "A", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "line", "firstPoint": "B", "secondPoint": "C" },
+        { "op": "line", "firstPoint": "C", "secondPoint": "D" },
+        { "op": "line", "firstPoint": "D", "secondPoint": "A" },
+        { "op": "piece.addPatternPiece", "name": "Square", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10" },
+        { "op": "piece.addAnchorPoint", "point": "A", "piece": "Square" },
+        { "op": "piece.internalPath", "piece": "Square", "nodes": ["A", "C"] },
+        { "op": "pattern.dump" },
+        { "op": "render.snapshot", "path": "snapshot.png", "width": 400, "height": 400 }
+    ]
+}
