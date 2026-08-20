@@ -2,8 +2,64 @@
 
 This directory holds every test harness written against `seamly2d-actiond`
 (`src/app/actiond`), the headless JSON action-layer daemon, across every implementation phase.
-The **primary, current harness** is `cases/` (Phase 8, described in detail below); the
-sub-folders below it document earlier phases' own harnesses, kept as-is and still runnable.
+
+20 Aug, 2026: `actiond` gained a second mode -- a **persistent NDJSON daemon** (see
+`docs/action-layer-schema.md`'s "Session protocol" section), alongside the original one-shot
+`--actions <file>` mode every harness below this point was written against. **`scripts/` +
+`run_tests.py`** (described first, right below) is the harness for that new daemon mode, and is
+also the first harness to exercise `point.edit` -- the edit-in-place action that closes the "no
+edit-in-place or delete action exists yet" gap `cases/`'s own README section below used to flag as
+unconditional. `cases/` (Phase 8) remains the primary harness for the one-shot mode and for every
+op `scripts/`'s three scenarios don't happen to touch; both harnesses run against the same
+`actiond` binary and are kept side by side rather than merged.
+
+## `scripts/` + `run_tests.py`: the persistent-daemon harness
+
+Three scenarios, each a single NDJSON request line (`scripts/*.json`, pretty-printed on disk for
+readability -- `run_tests.py` re-serializes each to one compact line before sending it):
+
+1. **`01_draw_square.json`** -- starting from `fixtures/empty.val` (a genuinely empty pattern, no
+   draft blocks, produced by running the daemon itself with no `--pattern` and immediately
+   `session.save`-ing), builds a 100x100 unit square (`basePoint` + three `endLine`s + four
+   `line`s -- `basePoint` can only anchor *one* point per draft block, so the other three corners
+   are formula points relative to it, not more `basePoint` calls), renders it, and saves
+   `square.val`/`square.png`.
+2. **`02_draw_l_shape.json`** -- same starting fixture, builds an L-shaped outline (a 100x100
+   square with a 40x40 notch cut from one corner: 6 points, 6 lines) from scratch, renders it, and
+   saves `l_shape_drawn.val`/`l_shape_drawn.png`. Its saved output is also committed as
+   `fixtures/l_shape.val`, the seed file scenario 3 imports.
+3. **`03_import_l_and_convert_to_rectangle.json`** -- run against a daemon started with
+   `--pattern fixtures/l_shape.val` (not `empty.val`; `run_tests.py` handles this per-scenario).
+   `pattern.dump`s the loaded geometry, then closes the notch with exactly two `point.edit` calls
+   -- `{"op":"point.edit","name":"D","length":"20","angle":"90"}` (point `D`, the notch's one
+   truly-interior corner, slides onto the same vertical line `B`-`C`-`E` already sit on, at
+   `x=100`, `y=-80` -- **not** onto `C`'s exact position: `VFormula`'s `checkZero` guard rejects a
+   formula that evaluates to `0`, matching the interactive dialog's own refusal of a zero-length
+   point, so the edit is chosen to land `D` collinear with its neighbors instead of coincident with
+   one of them -- either produces the same clean visual edge) and
+   `{"op":"point.edit","name":"E","length":"100"}` (point `E` slides out to `(100,-100)`, the
+   bounding rectangle's actual corner) -- `pattern.dump`s again to show the result, renders, and
+   saves `l_to_rectangle.val`/`l_to_rectangle.png`. **The same 6 point ids and 6 line ids
+   throughout** -- nothing is deleted or recreated, unlike `cases/03_import_l_shape_to_rectangle`'s
+   own rebuild-based workaround (see that case's own README section below, written before
+   `point.edit` existed).
+
+Run all three and check PASS/FAIL:
+```sh
+python3 run_tests.py
+```
+Requires `actiond` already built (`build_actiond.bat` at the repo root) at
+`../../out/src/app/actiond/bin/actiond(.exe)`; override with the `ACTIOND_EXE` environment
+variable. Output lands in `output/` (gitignored) -- open `square.png`/`l_shape_drawn.png`/
+`l_to_rectangle.png` by hand to visually confirm the geometry, and in particular confirm
+`l_to_rectangle.png`/`l_to_rectangle.val` show a **clean rectangle with no notch and no leftover
+duplicate geometry** (unlike `cases/03`'s two-`<piece>` rebuild output, `l_to_rectangle.val` has
+exactly the same 6 points and 6 lines `l_shape.val` did, just 2 of them moved).
+
+## The pre-existing `cases/` harness (Phase 8, one-shot mode)
+
+The **primary harness for the one-shot `--actions <file>` mode**; the sub-folders below it
+document earlier phases' own harnesses, kept as-is and still runnable.
 
 ## Quick start (Phase 8 `cases/` harness)
 
@@ -169,7 +225,12 @@ summary for anyone deciding whether to rely on the affected ops.
   `<calculation>` element referencing an id not yet defined by an earlier `<calculation>` element
   -- without needing Seamly2D itself available to try reopening the file.
 - **No edit-in-place or delete action exists yet** for any object type (points, lines, pieces,
-  ...) -- see "Case 3's edit-vs-rebuild choice" above. Flagged as explicit follow-up scope.
+  ...) -- see "Case 3's edit-vs-rebuild choice" above. **Partially closed 20 Aug, 2026:** `point.edit`
+  now supports in-place editing of a `basePoint`'s x/y and a formula-length/angle point's
+  `length`/`angle` (see `docs/action-layer-schema.md` and `scripts/
+  03_import_l_and_convert_to_rectangle.json` above, which redoes *this exact case* via `point.edit`
+  instead of the rebuild below). Editing lines/curves/pieces, and deleting any object type, remain
+  open follow-up scope.
 - **`lineType` values are not schema-validated at write time.** `line`/formula-point/curve
   handlers pass whatever `"lineType"` string a caller supplies straight through to the saved XML
   with no validation against the schema's actual enumeration (`solidLine`, `dashLine`, `dotLine`,

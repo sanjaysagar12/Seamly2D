@@ -57,6 +57,41 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("measurements.recompute"));      // Phase 7: mutating formula/geometry recompute, implemented in measurements_sync_handlers.cpp.
     tools.append(QStringLiteral("measurements.sync"));           // Phase 7: mutating measurements.load + measurements.recompute in one action, implemented in measurements_sync_handlers.cpp.
 
+    // 20 Aug, 2026: backfilled -- this list had fallen out of sync with ActionRegistry since Phase
+    // 8 registered all of the below without updating it (a pre-existing gap, not introduced by
+    // this change); fixed here alongside adding this change's own three new ops below.
+    tools.append(QStringLiteral("spline"));                      // Phase 8: mutating quadratic spline creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("splinePath"));                  // Phase 8: mutating multi-point spline path creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("cubicBezier"));                 // Phase 8: mutating cubic bezier curve creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("cubicBezierPath"));             // Phase 8: mutating multi-point cubic bezier path creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("arc"));                         // Phase 8: mutating arc-by-radius creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("arcWithLength"));               // Phase 8: mutating arc-by-length creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("ellipticalArc"));               // Phase 8: mutating elliptical arc creation, implemented in curve_handlers.cpp.
+    tools.append(QStringLiteral("cutSpline"));                   // Phase 8: mutating cut-spline point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("cutArc"));                      // Phase 8: mutating cut-arc point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("pointOfIntersectionArcs"));     // Phase 8: mutating arc/arc intersection point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("pointOfIntersectionCircles"));  // Phase 8: mutating circle/circle intersection point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("pointOfIntersectionCurves"));   // Phase 8: mutating curve/curve intersection point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("curveIntersectAxis"));          // Phase 8: mutating curve/axis intersection point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("pointFromCircleAndTangent"));   // Phase 8: mutating circle-and-tangent point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("pointFromArcAndTangent"));      // Phase 8: mutating arc-and-tangent point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("triangle"));                    // Phase 8: mutating triangle-point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("height"));                      // Phase 8: mutating height (perpendicular) point creation, implemented in cutpoint_handlers.cpp.
+    tools.append(QStringLiteral("move"));                        // Phase 8: mutating move operation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("rotation"));                    // Phase 8: mutating rotation operation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("mirrorByLine"));                // Phase 8: mutating mirror-by-line operation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("mirrorByAxis"));                // Phase 8: mutating mirror-by-axis operation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("group"));                       // Phase 8: mutating object-group creation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("trueDarts"));                   // Phase 8: mutating true-darts creation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("piece.addPatternPiece"));       // Phase 8: mutating pattern-piece assembly, implemented in piece_handlers.cpp.
+    tools.append(QStringLiteral("piece.addAnchorPoint"));        // Phase 8: mutating piece anchor-point creation, implemented in piece_handlers.cpp.
+    tools.append(QStringLiteral("piece.internalPath"));          // Phase 8: mutating piece internal-path creation, implemented in piece_handlers.cpp.
+    tools.append(QStringLiteral("piece.insertNodes"));           // Phase 8: mutating piece node insertion, implemented in piece_handlers.cpp.
+    tools.append(QStringLiteral("piece.union"));                 // Phase 8: mutating piece union -- KNOWN GAP, see piece_handlers.h; do not rely on it yet.
+    tools.append(QStringLiteral("point.edit"));                  // 20 Aug, 2026: mutating edit-in-place for an existing point's formula/coordinates, implemented in point_edit_handlers.cpp.
+    tools.append(QStringLiteral("session.save"));                // 20 Aug, 2026: in-script pattern save, implemented in session_handlers.cpp.
+    tools.append(QStringLiteral("session.close"));                // 20 Aug, 2026: session-lifecycle no-op, implemented in session_handlers.cpp.
+
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.
 

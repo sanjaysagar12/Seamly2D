@@ -17,7 +17,9 @@ SOURCES += \
     $$PWD/handlers/curve_handlers.cpp \
     $$PWD/handlers/cutpoint_handlers.cpp \
     $$PWD/handlers/operation_handlers.cpp \
-    $$PWD/handlers/piece_handlers.cpp
+    $$PWD/handlers/piece_handlers.cpp \
+    $$PWD/handlers/point_edit_handlers.cpp \
+    $$PWD/handlers/session_handlers.cpp
 
 *msvc*:SOURCES += $$PWD/stable.cpp
 
@@ -41,4 +43,6 @@ HEADERS += \
     $$PWD/handlers/curve_handlers.h \
     $$PWD/handlers/cutpoint_handlers.h \
     $$PWD/handlers/operation_handlers.h \
-    $$PWD/handlers/piece_handlers.h
+    $$PWD/handlers/piece_handlers.h \
+    $$PWD/handlers/point_edit_handlers.h \
+    $$PWD/handlers/session_handlers.h

@@ -55,11 +55,15 @@ SOURCES += \
     main.cpp \
     actiond_application.cpp \
     action_host.cpp \
+    pattern_session.cpp \
+    session_server.cpp \
     ../seamly2d/xml/vpattern.cpp
 
 HEADERS += \
     actiond_application.h \
     action_host.h \
+    pattern_session.h \
+    session_server.h \
     ../seamly2d/xml/vpattern.h
 
 include(warnings.pri)

@@ -22,142 +22,39 @@
 //  along with Seamly2D. If not, see <http://www.gnu.org/licenses/>.
 //---------------------------------------------------------------------------------------------------------------------
 
-#include "action_host.h" // Brings in the ActionHost::runActions declaration this file implements.
+#include "action_host.h"      // Brings in the ActionHost::runActions declaration this file implements.
+#include "pattern_session.h" // Brings in PatternSession, which now owns every step this file used to inline directly (VContainer/VPattern/scene/view construction, loading, parsing).
 
-#include "../seamly2d/xml/vpattern.h" // Brings in VPattern, the same VAbstractPattern subclass seamly2d itself uses to parse .val files.
+#include "../../libs/ifc/exception/vexception.h" // Brings in VException, thrown for a save failure below (PatternSession::loadFromFile() already throws it for load/parse failures).
 
-#include "../../libs/ifc/exception/vexception.h"     // Brings in VException, thrown below for every load-time failure.
-#include "../../libs/ifc/xml/vpatternconverter.h"    // Brings in VPatternConverter, which upgrades older-format pattern files.
-#include "../../libs/vformat/measurements.h"         // Brings in MeasurementDoc, used to load and parse the measurement file.
-#include "../../libs/vpatterndb/vcontainer.h"        // Brings in VContainer, the data container the pattern and measurements populate.
-#include "../../libs/vwidgets/vmaingraphicsscene.h"  // Brings in VMainGraphicsScene, required (non-null) by VPattern::Parse().
-#include "../../libs/vwidgets/vmaingraphicsview.h"   // Brings in VMainGraphicsView; see the qApp->setSceneView() comment below for why one is needed.
-#include "../../libs/vmisc/vabstractapplication.h"   // Brings in the qApp accessors used to mirror MainWindow::LoadPattern()'s setup.
+#include <QScopedPointer> // Provides QScopedPointer, giving the one-shot PatternSession RAII cleanup without a manual delete.
 
-#include "../../libs/actionlayer/action_context.h"  // Brings in ActionContext, bundling scene/doc/data for the engine.
-#include "../../libs/actionlayer/action_registry.h" // Brings in ActionRegistry, auto-registering Phase 1's built-in handlers.
-#include "../../libs/actionlayer/action_engine.h"   // Brings in ActionEngine::run(), the actual script dispatcher.
-
-#include <QFileInfo>       // Provides QFileInfo::exists(), used for the fast, clear existence checks below.
-#include <QScopedPointer>  // Provides QScopedPointer, giving doc RAII cleanup without a manual delete.
-
-namespace
-{
-    // Throws a VException with a clear message if the given file does not exist. Checking this
-    // up front means a missing file is reported as "file not found", not as a confusing deep XML
-    // parser error from inside VPatternConverter/MeasurementDoc.
-    void requireFileExists(const QString &filePath, const QString &kind)
-    {
-        if (!QFileInfo::exists(filePath)) // A single, cheap stat call; cheaper than attempting to open and parse first.
-        {
-            throw VException(QStringLiteral("%1 file not found: %2").arg(kind, filePath)); // Same exception type every other load failure below uses.
-        }
-    }
-}
-
+// 20 Aug, 2026: this function used to build the VContainer/VPattern/scenes/views directly (see
+// git history for the original inline version); that construction-and-wiring recipe is now
+// PatternSession's, shared with the new persistent NDJSON daemon mode (see session_server.cpp).
+// This function's own contract -- load a pattern once, run one script, optionally save, return --
+// is unchanged, so every existing caller/test of the one-shot --actions <file> CLI mode keeps
+// working exactly as before.
 namespace ActionHost
 {
     QJsonDocument runActions(const QString &patternFilePath, const QString &measurementsFilePath,
                               const QJsonDocument &actionsScript, const QString &savePatternFilePath)
     {
-        requireFileExists(patternFilePath, QStringLiteral("Pattern"));           // Fail fast with a clear message rather than a parser error.
-        requireFileExists(measurementsFilePath, QStringLiteral("Measurements")); // Fail fast with a clear message rather than a parser error.
+        // loadFromFile() throws VException (or a subclass) on any load/parse failure -- the same
+        // contract this function documented before the refactor; PatternSession's own factory
+        // requires patternFilePath to exist (measurementsFilePath may be empty).
+        QScopedPointer<PatternSession> session(PatternSession::loadFromFile(patternFilePath, measurementsFilePath));
 
-        // Data container the pattern and its measurements populate. Mirrors
-        // MainWindowsNoGUI's own construction: qApp->translateVariables() supplies formula-token
-        // translation, and qApp->patternUnitP() gives a live pointer to qApp's own unit storage,
-        // so later qApp->setPatternUnit() calls below are automatically visible through it.
-        VContainer data(qApp->translateVariables(), qApp->patternUnitP());
+        const QJsonDocument result = session->runActions(actionsScript); // abortOnFirstError left at its default (false): the one-shot CLI has always run every action and reported every result.
 
-        // VPattern::Parse() asserts both scenes are non-null and vtools' per-tool Create()
-        // factories add graphics items to them while parsing; a real (if display-less) scene is
-        // required, not optional, even though actiond never renders anything to a window.
-        VMainGraphicsScene draftScene; // Draft-mode scene: base points, lines, curves, etc.
-        VMainGraphicsScene pieceScene; // Piece-mode scene: cut pieces built from the draft.
-
-        // Phase 5: several reused undo-command redo() paths (e.g. AddToCalc::redo(), which every
-        // mutating draw-tool's AddToFile() goes through) unconditionally call
-        // VMainGraphicsView::NewSceneRect(qApp->getCurrentScene(), qApp->getSceneView()) at the
-        // end -- not gated behind any "is there a GUI" check, because in the real app there always
-        // is one. Both accessors return nullptr until something calls the matching setter, and
-        // NewSceneRect() dereferences the view unconditionally (its SCASSERT(view != nullptr) is a
-        // release-build no-op), so the first mutating action's redo() null-derefs and crashes the
-        // process. MainWindow wires these up from ui->view/currentScene in its own constructor;
-        // this mirrors that same wiring with an offscreen (QT_QPA_PLATFORM=offscreen, see main.cpp)
-        // VMainGraphicsView that is never shown, so the same reused code paths that need *some*
-        // view to exist still behave, without actiond needing a real display.
-        VMainGraphicsView sceneView; // Never shown; exists only so qApp->getSceneView() is non-null.
-        QGraphicsScene *currentScene = &draftScene; // setCurrentScene() takes QGraphicsScene** so qApp always sees the latest value, matching MainWindow's own pattern.
-        qApp->setCurrentScene(&currentScene);
-        qApp->setSceneView(&sceneView);
-        // Phase 6: attaches sceneView to draftScene so draftScene.views() is non-empty. Several
-        // paint() overrides elsewhere (e.g. VGraphicsSimpleTextItem::paint(), used by every point's
-        // name label) unconditionally call scene->views().at(0) -- QList::at() with an out-of-range
-        // index is undefined behavior in a release build (no bounds check), so a scene with zero
-        // attached views crashes the whole process the first time render.snapshot's scene->render()
-        // paints a point with its name label shown. MainWindow attaches its own view via
-        // ui->view->setScene(...); this is that same attachment for actiond's offscreen view.
-        sceneView.setScene(&draftScene);
-
-        // Phase 8: same defensive attachment as sceneView/draftScene above, for pieceScene --
-        // PatternPieceTool/InternalPathTool/UnionTool add label/graphics items to pieceScene, and
-        // nothing here ever calls qApp->setSceneView() a second time for it (that accessor tracks
-        // only the single "current" editing view, unrelated to which scenes have >=1 attached
-        // view), so pieceScene needs its own view purely so pieceScene.views() is non-empty.
-        VMainGraphicsView pieceSceneView; // Never shown; exists only so pieceScene.views() is non-empty.
-        pieceSceneView.setScene(&pieceScene);
-
-        // QScopedPointer gives doc RAII cleanup on every return path (including the exceptions
-        // thrown by setXMLContent()/Parse() below) without a manual try/catch-and-delete.
-        QScopedPointer<VPattern> doc(new VPattern(&data, &draftScene, &pieceScene));
-        qApp->setCurrentDocument(doc.data()); // Mirrors MainWindow's own setup; some formula/tool code reaches for qApp's "current" document.
-        qApp->setCurrentData(&data);          // Mirrors MainWindow's own setup; some formula/tool code reaches for qApp's "current" data container.
-
-        // VPatternConverter upgrades an older-format .val file to the schema version
-        // VPattern::Parse() expects, exactly as MainWindow::LoadPattern() does; reusing it avoids
-        // reimplementing pattern-format version migration here.
-        VPatternConverter converter(patternFilePath);
-        doc->setXMLContent(converter.Convert()); // Loads the (possibly just-upgraded) pattern XML into doc's DOM tree.
-        qApp->setPatternUnit(doc->measurementUnits()); // Sync qApp's unit to the pattern file's own declared unit, as MainWindow::LoadPattern() does.
-
-        // Measurements must be loaded before Parse() below: pattern formulas can reference
-        // measurement variables, which have to already exist in data by the time they're evaluated.
-        MeasurementDoc measurements(&data);
-        measurements.setSize(VContainer::rsize());        // Matches MainWindow::LoadPattern()'s setup for gradation-aware formulas.
-        measurements.setHeight(VContainer::rheight());     // Matches MainWindow::LoadPattern()'s setup for gradation-aware formulas.
-        measurements.setXMLContent(measurementsFilePath); // Loads the measurement file's XML into its own DOM tree; also sets measurements.Type() via ReadType().
-        // Phase 7: mirrors MainWindow::loadMeasurements()'s qApp->setPatternType(m_measurements->Type())
-        // call (mainwindow.cpp). Without this, qApp->patternType() stays MeasurementsType::Unknown
-        // for the whole process (its constructor default -- vabstractapplication.cpp), which would
-        // make measurements_sync_handlers.cpp's "measurements.load" type-consistency guard
-        // (mirroring MainWindow::updateMeasurements()'s own qApp->patternType() != Type() check)
-        // reject every legitimate load, since Unknown can never equal a real file's Individual or
-        // Multisize type.
-        qApp->setPatternType(measurements.Type());
-        measurements.readMeasurements();                   // Parses that XML into real measurement variables inside data.
-
-        // The real, full parse: walks the pattern XML and builds every geometry object and the
-        // tool history into data/doc, via the same vtools Create() factories the GUI editor uses.
-        doc->Parse(Document::FullParse);
-
-        // Phase 8: passes pieceScene too, so piece_handlers.cpp's ops (PatternPieceTool,
-        // InternalPathTool, UnionTool, ...) add their graphics items to the same piece-mode scene
-        // VPattern::Parse() itself already populated, exactly mirroring MainWindow's own
-        // draftScene/pieceScene split.
-        ActionContext ctx(&draftScene, doc.data(), &data, &pieceScene); // Bundles the quartet ActionEngine's handlers read from.
-        ActionRegistry registry;                            // Auto-registers every built-in handler (read-only and, since Phase 5, mutating).
-        ActionEngine engine(registry);                       // Dispatches the script below through that registry.
-
-        const QJsonDocument result = engine.run(actionsScript, ctx); // Runs every action in the script; {"results": [...]}.
-
-        // Phase 5: persist whatever "basePoint"/"line"/etc. actions mutated, if the caller asked
-        // for that. This runs regardless of individual actions' ok/failure -- a partially-applied
-        // batch is still real DOM state worth inspecting -- and after engine.run() rather than
-        // per-action, so one save reflects the whole script's cumulative effect.
+        // Persist whatever "basePoint"/"line"/etc. actions mutated, if the caller asked for that.
+        // This runs regardless of individual actions' ok/failure -- a partially-applied batch is
+        // still real DOM state worth inspecting -- and after runActions() rather than per-action,
+        // so one save reflects the whole script's cumulative effect.
         if (!savePatternFilePath.isEmpty())
         {
-            QString saveError; // SaveDocument() reports failure via this out-parameter, not an exception.
-            if (!doc->SaveDocument(savePatternFilePath, saveError))
+            QString saveError; // save() reports failure via this out-parameter, not an exception.
+            if (!session->save(savePatternFilePath, saveError))
             {
                 throw VException(QStringLiteral("Failed to save pattern to %1: %2").arg(savePatternFilePath, saveError));
             }

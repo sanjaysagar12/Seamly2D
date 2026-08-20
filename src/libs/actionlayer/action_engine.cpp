@@ -57,7 +57,7 @@ ActionEngine::ActionEngine(ActionRegistry &registry)
 // through the registry by its "op" name, and collects every ActionResult into {"results": [...]}.
 // An entry naming an unregistered op produces a failed result instead of being skipped or
 // crashing, so callers always get one result per input action.
-QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext &ctx)
+QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext &ctx, bool abortOnFirstError)
 {
     const QJsonObject root = script.object();                   // Read the top-level JSON object from the script document.
     const QJsonArray actions = root.value("actions").toArray(); // Read the "actions" array; empty if absent or wrong type.
@@ -127,6 +127,11 @@ QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext
             result = ActionResult::failure(QJsonValue(errorDetail)); // Structured error payload instead of a plain message string.
         }
         results.append(toJson(result, op)); // Record the handler's outcome, success or failure, in script order.
+
+        if (!result.ok && abortOnFirstError) // Session-protocol "onError":"abort": stop after the first failure, keeping every result gathered so far (including this failing one).
+        {
+            break;
+        }
     }
 
     QJsonObject output; // Wraps the collected results under the documented output key.

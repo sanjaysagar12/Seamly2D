@@ -182,4 +182,5 @@ target_wrapper.sh
 .claude/
 
 # documents
-docs/
+docs/*
+!docs/action-layer-schema.md

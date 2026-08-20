@@ -40,7 +40,14 @@ public:
     // Parses the top-level {"actions": [{"op": "...", ...}, ...]} script, dispatches each entry
     // through the registry, and returns {"results": [...]} with one entry per action, in order.
     // An unknown "op" produces a result entry with ok == false instead of crashing or skipping.
-    QJsonDocument run(const QJsonDocument &script, const ActionContext &ctx); // Implemented in action_engine.cpp.
+    //
+    // abortOnFirstError (default false, preserving every pre-existing call site's behavior):
+    // when true, the loop appends the result for the first failing action and then stops --
+    // "results" holds one entry per action actually processed, not one per input action. Backs
+    // the NDJSON session protocol's "onError":"abort" (see session_server.cpp); the default-false
+    // "keep going" behavior remains what every one-shot actiond script and ActionLayerTest fixture
+    // already relies on.
+    QJsonDocument run(const QJsonDocument &script, const ActionContext &ctx, bool abortOnFirstError = false); // Implemented in action_engine.cpp.
 
 private:
     ActionRegistry &m_registry; // Reference to the registry supplied at construction; not owned by ActionEngine.

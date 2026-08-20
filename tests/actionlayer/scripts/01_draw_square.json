@@ -1,0 +1,13 @@
+{"id": "sq-1", "onError": "abort", "actions": [
+  {"op": "basePoint", "name": "S1", "x": 0, "y": 0, "draftBlock": "Front"},
+  {"op": "endLine", "name": "S2", "basePoint": "S1", "length": "100", "angle": "0"},
+  {"op": "endLine", "name": "S3", "basePoint": "S2", "length": "100", "angle": "90"},
+  {"op": "endLine", "name": "S4", "basePoint": "S1", "length": "100", "angle": "90"},
+  {"op": "line", "firstPoint": "S1", "secondPoint": "S2"},
+  {"op": "line", "firstPoint": "S2", "secondPoint": "S3"},
+  {"op": "line", "firstPoint": "S3", "secondPoint": "S4"},
+  {"op": "line", "firstPoint": "S4", "secondPoint": "S1"},
+  {"op": "render.snapshot", "path": "square.png"},
+  {"op": "session.save", "path": "square.val"},
+  {"op": "session.close"}
+]}

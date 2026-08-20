@@ -37,6 +37,8 @@
 #include "handlers/cutpoint_handlers.h"               // Brings in the ten Phase 8 cut/intersection point handle*() functions below.
 #include "handlers/operation_handlers.h"              // Brings in the six Phase 8 operation handle*() functions below (move, rotation, mirrorByLine, mirrorByAxis, group, trueDarts).
 #include "handlers/piece_handlers.h"                  // Brings in the five Phase 8 piece.* handle*() functions below.
+#include "handlers/point_edit_handlers.h"              // Brings in handlePointEdit(), registered under "point.edit".
+#include "handlers/session_handlers.h"                 // Brings in handleSessionSave()/handleSessionClose(), registered under "session.save"/"session.close".
 
 // Constructs an empty handler map, then immediately populates it with every built-in handler.
 ActionRegistry::ActionRegistry()
@@ -101,6 +103,11 @@ void ActionRegistry::registerBuiltinActions()
     registerAction(QStringLiteral("piece.internalPath"), &handlePieceInternalPath);
     registerAction(QStringLiteral("piece.insertNodes"), &handlePieceInsertNodes);
     registerAction(QStringLiteral("piece.union"), &handlePieceUnion);
+
+    // 20 Aug, 2026: edit-in-place and session-lifecycle actions, backing the persistent NDJSON daemon (session_server.cpp).
+    registerAction(QStringLiteral("point.edit"), &handlePointEdit);         // Mutates an existing point's stored formula/coordinates in place (no new id).
+    registerAction(QStringLiteral("session.save"), &handleSessionSave);     // In-script equivalent of the one-shot CLI's --save-pattern flag.
+    registerAction(QStringLiteral("session.close"), &handleSessionClose);   // No-op action; SessionServer's read loop exits after this batch's response.
 }
 
 // Stores the handler function in the internal map under the given name.
