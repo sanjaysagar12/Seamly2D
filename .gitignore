@@ -184,3 +184,4 @@ target_wrapper.sh
 # documents
 docs/*
 !docs/action-layer-schema.md
+!docs/ARCHITECTURE.md
