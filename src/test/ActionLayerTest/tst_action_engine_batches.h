@@ -44,6 +44,15 @@ private slots:
     void testMultiActionChain();       // 03_multi_action_chain: three actions in one batch, ordered per-action results.
     void testDuplicateNameGuard();     // 04_duplicate_name_guard: resolving the same name twice is idempotent and stable.
     void testEngineSurvivesResolverFailure(); // Regression: a resolver failure mid-batch does not abort later actions or crash the process.
+
+    // Phase 10: error-handling coverage not exercised anywhere else at the C++ level (only through
+    // the actiond-process Python harnesses -- see tests/actionlayer/). These dispatch straight
+    // through ActionEngine::run() with no scene/doc/real pattern file needed, since every scenario
+    // below fails before any handler would touch ctx.scene()/ctx.doc().
+    void testUnknownOpDoesNotCrash();             // An "op" absent from ActionRegistry produces a failed result, not a skip or a crash.
+    void testMissingRequiredFieldReturnsFailure(); // A registered op ("line") missing a required field fails schema-style, before ever reaching Create().
+    void testEngineCatchesEscapedVException();     // A handler that lets a VException escape uncaught still yields a clean "coreException" result, not a crash.
+    void testEngineCatchesEscapedStdException();   // Same, for a plain std::exception -- the "unhandledException" catch-all clause.
 };
 
 #endif // TST_ACTION_ENGINE_BATCHES_H // End of include guard started above.

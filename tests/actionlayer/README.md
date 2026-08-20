@@ -280,4 +280,8 @@ by default; override with `ACTIOND_EXE=/path/to/actiond.exe`.
 There is also a proper Qt/QtTest C++ unit test suite at `src/test/ActionLayerTest/` (built via its
 own `.pro` file, separate from anything in this directory), covering `ActionEngine`,
 `NameResolver`, `pattern.dump`, and `render.snapshot` at the C++ level rather than through the
-`actiond` CLI.
+`actiond` CLI. `tst_action_engine_batches.cpp` also covers `ActionEngine::run()`'s error-handling
+safety net directly (an unregistered `"op"`, a real op missing a required field, and a handler
+that lets a `VException`/`std::exception` escape uncaught) -- see
+[`docs/action-layer-schema.md`](../../docs/action-layer-schema.md)'s "Error handling" section for
+the full error-`"type"` taxonomy these and the Python harnesses above collectively exercise.

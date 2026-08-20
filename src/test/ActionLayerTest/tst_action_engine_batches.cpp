@@ -31,6 +31,7 @@
 #include "../../libs/vpatterndb/vcontainer.h" // Brings in VContainer, holding the hand-built points for these tests.
 #include "../../libs/vgeometry/vpointf.h"     // Brings in VPointF, the point objects added to the container below.
 #include "../../libs/vmisc/def.h"             // Brings in the Unit enum used below.
+#include "../../libs/ifc/exception/vexceptionbadid.h" // Brings in VExceptionBadId, thrown by the throwaway handler in testEngineCatchesEscapedVException().
 
 #include "test_pattern_doc.h" // Brings in TestPatternDoc, the minimal VAbstractPattern stub shared by every ActionLayerTest file.
 
@@ -39,6 +40,7 @@
 #include <QJsonObject>      // Provides QJsonObject, used for each inline action entry in the regression test.
 #include <QJsonParseError>  // Provides QJsonParseError, used to detect malformed fixture JSON early and clearly.
 #include <QtTest>           // Provides QCOMPARE/QVERIFY, QFINDTESTDATA, and the QTest infrastructure this file's slots run under.
+#include <stdexcept>        // Provides std::runtime_error, thrown by the throwaway handler in testEngineCatchesEscapedStdException().
 
 namespace
 {
@@ -170,4 +172,123 @@ void TST_ActionEngineBatches::testEngineSurvivesResolverFailure()
 
     const QJsonObject secondResult = results.at(1).toObject();
     QVERIFY2(secondResult.value("ok").toBool(), "the second action (known name) must still succeed after the first one failed");
+}
+
+// Phase 10: "op" not present in ActionRegistry must fail cleanly (ActionEngine::run()'s own
+// !handler guard), not be silently skipped and not crash. This is the one error path already
+// covered by production code before Phase 10 -- this slot just locks it in with a real assertion,
+// since nothing at the C++ level exercised it before.
+void TST_ActionEngineBatches::testUnknownOpDoesNotCrash()
+{
+    const Unit unit = Unit::Cm;
+    VContainer data(nullptr, &unit);
+    TestPatternDoc doc;
+    ActionContext ctx(nullptr, &doc, &data); // Never touched: the unknown-op path returns before any handler runs.
+    ActionRegistry registry;
+    ActionEngine engine(registry);
+
+    const QJsonObject action{{"op", QStringLiteral("notARealTool")}};
+    const QJsonDocument script(QJsonObject{{"actions", QJsonArray{action}}});
+
+    const QJsonDocument output = engine.run(script, ctx); // Must return normally.
+    const QJsonArray results = output.object().value("results").toArray();
+    QCOMPARE(results.size(), 1);
+
+    const QJsonObject result = results.at(0).toObject();
+    QVERIFY2(!result.value("ok").toBool(), "an unregistered op must report ok == false");
+    QVERIFY2(result.value("error").toString().contains(QStringLiteral("notARealTool")),
+              "the error message should name the offending op so a caller can self-correct");
+}
+
+// Phase 10: a registered, real op ("line") missing a required field ("secondPoint") must fail
+// before ever reaching NameResolver or VToolLine::Create() -- line_handlers.cpp validates both
+// names are non-empty first. Locks in that this schema-style validation already happens and
+// produces a normal failed result, not a crash from an empty-string name reaching Create().
+void TST_ActionEngineBatches::testMissingRequiredFieldReturnsFailure()
+{
+    const Unit unit = Unit::Cm;
+    VContainer data(nullptr, &unit);
+    TestPatternDoc doc;
+    ActionContext ctx(nullptr, &doc, &data); // scene left null: the missing-field check fires before "line" would ever touch ctx.scene().
+    ActionRegistry registry;
+    ActionEngine engine(registry);
+
+    const QJsonObject action{{"op", QStringLiteral("line")}, {"firstPoint", QStringLiteral("A")}}; // "secondPoint" deliberately omitted.
+    const QJsonDocument script(QJsonObject{{"actions", QJsonArray{action}}});
+
+    const QJsonDocument output = engine.run(script, ctx);
+    const QJsonArray results = output.object().value("results").toArray();
+    QCOMPARE(results.size(), 1);
+
+    const QJsonObject result = results.at(0).toObject();
+    QVERIFY2(!result.value("ok").toBool(), "line missing \"secondPoint\" must fail, not crash or silently default");
+    QVERIFY2(result.value("error").toString().contains(QStringLiteral("secondPoint")),
+              "the error message should name the missing field");
+}
+
+// Phase 10: proves ActionEngine::run()'s VException safety net (action_engine.cpp), not any
+// existing handler's own local try/catch -- every real op already catches VException itself
+// before it would reach this loop (see e.g. formula_point_handlers.cpp's runCreate()). Registers a
+// throwaway handler that throws directly, bypassing every real op's own protection, so what's
+// actually under test is run()'s own catch (const VException&) clause.
+void TST_ActionEngineBatches::testEngineCatchesEscapedVException()
+{
+    const Unit unit = Unit::Cm;
+    VContainer data(nullptr, &unit);
+    buildFixtureContainer(data); // Populates "A"/"A1"/"A2" so the follow-up action below can succeed.
+    TestPatternDoc doc;
+    ActionContext ctx(nullptr, &doc, &data);
+
+    ActionRegistry registry; // Every built-in handler, plus...
+    registry.registerAction(QStringLiteral("test.throwsVException"),
+        [](const QJsonObject &, const ActionContext &) -> ActionResult {
+            throw VExceptionBadId(QStringLiteral("test-induced failure"), quint32(999)); // Deliberately uncaught here.
+        });
+    ActionEngine engine(registry);
+
+    const QJsonObject failingAction{{"op", QStringLiteral("test.throwsVException")}};
+    const QJsonObject followupAction{{"op", QStringLiteral("pattern.resolveName")}, {"name", QStringLiteral("A")}};
+    const QJsonDocument script(QJsonObject{{"actions", QJsonArray{failingAction, followupAction}}});
+
+    const QJsonDocument output = engine.run(script, ctx); // Must return normally: the VException must not escape run() itself.
+    const QJsonArray results = output.object().value("results").toArray();
+    QCOMPARE(results.size(), 2); // Both actions must produce a result; the escaped exception must not abort the batch.
+
+    const QJsonObject firstResult = results.at(0).toObject();
+    QVERIFY2(!firstResult.value("ok").toBool(), "the throwaway handler's VException must surface as ok == false, not crash the process");
+    QCOMPARE(firstResult.value("error").toObject().value("type").toString(), QStringLiteral("coreException"));
+    QVERIFY2(!firstResult.value("error").toObject().value("message").toString().isEmpty(),
+              "VException::ErrorMessage() should be carried through, not dropped");
+
+    const QJsonObject secondResult = results.at(1).toObject();
+    QVERIFY2(secondResult.value("ok").toBool(), "the second action must still run after the first escaped an exception");
+}
+
+// Same as testEngineCatchesEscapedVException(), for a plain std::exception -- exercises run()'s
+// catch (const std::exception&) clause ("unhandledException") instead of the VException one.
+void TST_ActionEngineBatches::testEngineCatchesEscapedStdException()
+{
+    const Unit unit = Unit::Cm;
+    VContainer data(nullptr, &unit);
+    TestPatternDoc doc;
+    ActionContext ctx(nullptr, &doc, &data);
+
+    ActionRegistry registry;
+    registry.registerAction(QStringLiteral("test.throwsStdException"),
+        [](const QJsonObject &, const ActionContext &) -> ActionResult {
+            throw std::runtime_error("plain std::exception, not a VException"); // Deliberately uncaught here.
+        });
+    ActionEngine engine(registry);
+
+    const QJsonObject action{{"op", QStringLiteral("test.throwsStdException")}};
+    const QJsonDocument script(QJsonObject{{"actions", QJsonArray{action}}});
+
+    const QJsonDocument output = engine.run(script, ctx); // Must return normally.
+    const QJsonArray results = output.object().value("results").toArray();
+    QCOMPARE(results.size(), 1);
+
+    const QJsonObject result = results.at(0).toObject();
+    QVERIFY2(!result.value("ok").toBool(), "the throwaway handler's std::exception must surface as ok == false, not crash the process");
+    QCOMPARE(result.value("error").toObject().value("type").toString(), QStringLiteral("unhandledException"));
+    QCOMPARE(result.value("error").toObject().value("message").toString(), QStringLiteral("plain std::exception, not a VException"));
 }

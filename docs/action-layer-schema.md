@@ -55,6 +55,87 @@ Response line (always one line, compact JSON, flushed immediately):
 
 `session.close` (see below) ends the loop after its batch's response is written.
 
+**One-shot mode's response shape is different from the daemon shape documented above.** One-shot
+mode (`--actions <file>`, no daemon) prints `ActionEngine::run()`'s own raw output directly, with
+no `id`/`status`/`appliedCount` wrapper and no `index` per result:
+
+```json
+{"results": [{"op": "basePoint", "ok": true, "value": {"id": 1, "name": "A"}, "error": ""}]}
+```
+
+Only the persistent daemon (`SessionServer::processLine()`/`remapResult()`,
+`src/app/actiond/session_server.cpp`) remaps this into the `{id,status,appliedCount,results:[
+{op,index,status,result,error}],error}` shape shown above. A caller driving one-shot mode should
+read `result.ok` (bool) and `result.error`, not `result.status`; a caller driving the daemon should
+read `result.status` (`"ok"|"error"`) and `result.result`, not `result.value`. See
+`tests/actionlayer/actionlayer-tests/expected/*/response.json` for real one-shot examples and
+`tests/actionlayer/scripts/` for real daemon examples.
+
+## Error handling
+
+Every op returns a failure the same general way: `ok: false` (one-shot) / `status: "error"`
+(daemon), with the failure detail in `error`. That `error` value is either a **plain string**
+(most simple validation failures) or a **structured object** with at least `"type"` and
+`"message"` fields (failures worth letting an automated/AI caller branch on programmatically).
+Which shape a given failure uses is a property of *where* the check lives, not of severity:
+
+- **Plain-string errors** come from a handler's own field validation, run *before* it resolves any
+  name or calls into Seamly2D core -- e.g. `line` requiring non-empty `"firstPoint"`/`"secondPoint"`,
+  `basePoint` requiring `"x"`/`"y"`/a non-empty `"draftBlock"` name, `endLine` requiring a `"length"`
+  formula. These are deliberately terse ("X requires non-empty Y") rather than typed, since they are
+  malformed-input errors a caller fixes once by reading the docs above, not errors a program needs
+  to branch on by category.
+- **Structured errors** (`{"type", "message", ...op-specific fields}`) cover every failure mode
+  that *is* worth branching on:
+
+  | `type`                  | Thrown/produced by                                                    | Extra fields |
+  |--------------------------|------------------------------------------------------------------------|--------------|
+  | `nameResolution`         | `NameResolver::idForName()`/`nameForId()` (`ActionResolverError`, caught in `ActionEngine::run()`) | `name`, `kind` (`"notFound"` \| `"wrongScope"` \| `"duplicate"`), `knownNames`, `foundInScope` (only for `wrongScope`) |
+  | `formulaError`           | A malformed formula string, caught from `qmu::QmuParserError` (see below) | `op`, `expr` (the sub-expression qmu was evaluating) |
+  | `draftBlockExists`       | `basePoint` naming a `draftBlock` that already exists (or is empty)   | `draftBlock` |
+  | `noIntersection`         | `lineIntersect` naming two exactly-parallel lines                     | — |
+  | `unsupported`            | `point.edit` naming a field that doesn't apply to the point's actual tool type | — |
+  | `missingMeasurements`    | `measurements.load`/`.sync`/`.recompute` against a file missing a measurement the pattern requires | `missing` (array of names) |
+  | `measurementTypeMismatch`| A measurement file supplying a value of the wrong type for a name the pattern expects | `expected`, `actual` |
+  | `coreException`          | Any `VException` (or subclass: `VExceptionBadId`, `VExceptionWrongId`, `VExceptionObjectError`, `VExceptionEmptyParameter`, `VExceptionConversionError`, ...) that reaches `ActionEngine::run()`'s own catch clause uncaught by the handler itself | `detail` (only if the exception's own `DetailedInformation()` is non-empty) |
+  | `unhandledException`     | Any other `std::exception` that reaches `ActionEngine::run()`'s catch clause uncaught | — |
+  | `unknownError`           | A non-`std::exception` C++ exception (`catch (...)`) escaping a handler -- should never happen in practice | — |
+
+  An "Unknown action op" failure (an `"op"` string absent from `ActionRegistry`) is its own case:
+  a plain string, produced directly by `ActionEngine::run()` before any handler lookup happens at
+  all, naming the offending op.
+
+**Where `VException` handling actually lives.** Seamly2D core throws `VException` (and its
+subclasses, `src/libs/ifc/exception/vexception*.h`) from tool-creation calls like
+`VToolLine::Create()`/`VToolEndLine::Create()` on malformed pattern data (bad id, wrong object
+type, missing DOM attribute, ...). Three layers guard against one ever reaching a caller as a raw
+crash:
+
+1. **Every handler that calls a real `Create()`** wraps that call in its own local
+   `try { ... } catch (const VException&) catch (const std::exception&) catch (...)` (see
+   `line_handlers.cpp`, `point_handlers.cpp`, `formula_point_handlers.cpp`'s shared `runCreate()`,
+   and every other mutating handler), converting the failure into an `ActionResult::failure()`
+   before it ever reaches `ActionEngine::run()`. This is the primary, expected path -- almost
+   every `VException` a caller will ever see was caught here, not by layer 2.
+2. **`ActionEngine::run()` itself** (`action_engine.cpp`) additionally catches
+   `ActionResolverError`, `VException`, `std::exception`, and `...` around every handler
+   dispatch, as a safety net for a handler added later without its own local catch. This is what
+   produces the `coreException`/`unhandledException`/`unknownError` types above.
+3. **The process-level catches** in `main.cpp` (one-shot mode, around the whole run) and
+   `session_server.cpp`'s `processLine()` (daemon mode, around one request line) are the final,
+   rarely-exercised nets -- they exist for a failure outside action dispatch entirely (a pattern
+   file that fails to load/parse), not for a per-action failure, which layers 1-2 above already
+   convert to a normal JSON result.
+
+**Formula errors specifically:** `VAbstractTool::CheckFormula()`
+(`src/libs/vtools/tools/vabstracttool.cpp`) evaluates every formula string via
+`Calculator::EvalFormula()`. On a parse failure it checks `qApp->isAppInGUIMode()` -- `actiond`
+(`actiond_application.cpp`) always reports `false`, so `CheckFormula()` never shows a "fix the
+formula" dialog and always re-throws `qmu::QmuParserError` instead, which layer 1 above (each
+formula-bearing handler's `runCreate()`) catches into the `formulaError` type. A broken formula is
+therefore always a clean, fast JSON failure -- never a blocking dialog and never a process crash;
+see `tests/actionlayer/actionlayer-tests/fixtures/08_error_bad_formula.json` for a live example.
+
 ## Read-only introspection
 
 **`pattern.dump`** — every geometry object plus the tool-history list.

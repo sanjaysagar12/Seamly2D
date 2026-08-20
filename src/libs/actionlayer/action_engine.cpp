@@ -29,6 +29,8 @@
 #include "action_result.h"   // Brings in ActionResult, the per-action value this file serializes to JSON.
 #include "name_resolver.h"   // Brings in ActionResolverError, caught below so a bad name never escapes run() uncaught.
 
+#include "../ifc/exception/vexception.h" // Brings in VException, caught below as a safety net (see the catch clause's own comment).
+
 #include <QJsonArray>  // Provides QJsonArray, used for both the "actions" input and "results" output arrays.
 #include <QJsonObject> // Provides QJsonObject, used for the script's top-level object and each action/result entry.
 
@@ -125,6 +127,42 @@ QJsonDocument ActionEngine::run(const QJsonDocument &script, const ActionContext
             errorDetail["knownNames"] = knownNames; // Lets the caller self-correct without a second round trip.
 
             result = ActionResult::failure(QJsonValue(errorDetail)); // Structured error payload instead of a plain message string.
+        }
+        // Safety net, not the primary error path: every handler that reaches a real Seamly2D
+        // Create()/tool call already wraps it in its own local try/catch (see e.g.
+        // formula_point_handlers.cpp's runCreate()), converting VException/qmu::QmuParserError/
+        // std::exception into an ActionResult::failure() before it ever reaches this loop. These
+        // three clauses exist so a handler added later *without* its own local catch -- or any
+        // other genuinely unanticipated failure -- still becomes a clean per-action JSON error
+        // instead of an uncaught exception that would terminate the whole actiond process (losing
+        // every result already gathered for earlier actions in this batch). Order matters: a
+        // VException (QException subclass) is itself a std::exception, so its clause must precede
+        // the std::exception clause below, exactly like the ActionResolverError clause above it.
+        catch (const VException &error)
+        {
+            QJsonObject errorDetail;
+            errorDetail["type"] = QStringLiteral("coreException"); // Distinguishes "Seamly2D's own core threw" from a plain "unhandledException" below.
+            errorDetail["message"] = error.ErrorMessage();         // VException's own human-readable summary.
+            const QString detail = error.DetailedInformation();    // Extra context some VException subclasses provide (e.g. the offending DOM tag); empty for most.
+            if (!detail.isEmpty())
+            {
+                errorDetail["detail"] = detail;
+            }
+            result = ActionResult::failure(QJsonValue(errorDetail));
+        }
+        catch (const std::exception &error) // Anything else well-behaved that escaped a handler without being converted first.
+        {
+            QJsonObject errorDetail;
+            errorDetail["type"] = QStringLiteral("unhandledException");
+            errorDetail["message"] = QString::fromUtf8(error.what());
+            result = ActionResult::failure(QJsonValue(errorDetail));
+        }
+        catch (...) // Absolute last resort: guarantees no exception of any kind escapes run()'s dispatch loop uncaught.
+        {
+            QJsonObject errorDetail;
+            errorDetail["type"] = QStringLiteral("unknownError");
+            errorDetail["message"] = QStringLiteral("An unrecognized exception escaped action '%1'").arg(op);
+            result = ActionResult::failure(QJsonValue(errorDetail));
         }
         results.append(toJson(result, op)); // Record the handler's outcome, success or failure, in script order.
 
