@@ -1,0 +1,18 @@
+# Keep the actiond build context small and reproducible.
+.git
+out/
+dist/
+docs/
+Doxyfile
+*.dmg
+*.zip
+*.AppImage
+.github/
+scripts/
+share/translations/*.qm
+tests/**/output
+**/*.o
+**/moc_*
+**/obj/
+**/moc/
+**/bin/

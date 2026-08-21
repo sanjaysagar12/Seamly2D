@@ -1,0 +1,20 @@
+services:
+  actiond:
+    build:
+      context: .
+      dockerfile: Dockerfile.actiond
+    image: seamly2d-actiond:latest
+    volumes:
+      # Source .val patterns and measurement files -- mounted read-only, actiond never writes here.
+      - ./examples/actionlayer:/data/input:ro
+      # render.snapshot PNGs, export.scene SVGs, session.save .val output.
+      - ./out-actiond:/data/output
+    stdin_open: true   # NDJSON is piped in over stdin -- keep it open across requests.
+    tty: false          # Not an interactive TTY session; this is a machine protocol.
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/bin/actiond", "--list-tools", "--format=ai"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
