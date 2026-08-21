@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, db
+from .agent_loop import SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT
 from .session_manager import SessionNotFoundError, manager
 
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +78,10 @@ async def list_models():
     return {
         "models": [{"id": model_id, "label": label} for model_id, label in config.SELECTABLE_MODELS.items()],
         "default": config.ANTHROPIC_MODEL,
+        # Lets the home page prefill an editable system-prompt field with the real default
+        # instead of either hardcoding a stale copy of it in the frontend or adding a second
+        # round trip just for one string -- StartScreen already fetches this endpoint on mount.
+        "defaultSystemPrompt": DEFAULT_SYSTEM_PROMPT,
     }
 
 
@@ -90,6 +95,7 @@ class StartSessionRequest(BaseModel):
     stepLimit: Optional[int] = None
     autorun: bool = True
     model: Optional[str] = None
+    systemPrompt: Optional[str] = None
 
 
 @app.post("/api/sessions")
@@ -108,6 +114,7 @@ async def start_session(req: StartSessionRequest):
             step_limit=req.stepLimit or config.DEFAULT_STEP_LIMIT,
             autorun=req.autorun,
             model=req.model,
+            system_prompt=req.systemPrompt,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

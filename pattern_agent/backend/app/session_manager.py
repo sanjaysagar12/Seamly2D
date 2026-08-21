@@ -63,6 +63,7 @@ class DesignSession:
             "session_id": self.session_id,
             "goal": agent.goal,
             "model": agent.model,
+            "system_prompt": agent.system_prompt,
             "step_limit": agent.step_limit,
             "status": agent.status,
             "step": agent.step,
@@ -155,6 +156,7 @@ class SessionManager:
         step_limit: int = config.DEFAULT_STEP_LIMIT,
         autorun: bool = True,
         model: str | None = None,
+        system_prompt: str | None = None,
     ) -> DesignSession:
         if model is not None and model not in config.SELECTABLE_MODELS:
             raise ValueError(
@@ -188,6 +190,7 @@ class SessionManager:
             emit=self._make_emit(ref),
             step_limit=step_limit,
             model=resolved_model,
+            system_prompt=system_prompt,
         )
 
         design_session = DesignSession(session_id, agent, created_at=_now())
@@ -239,6 +242,7 @@ class SessionManager:
                 emit=self._make_emit(ref),
                 step_limit=row["step_limit"],
                 model=row["model"] or config.ANTHROPIC_MODEL,
+                system_prompt=row["system_prompt"],
             )
             agent.messages = db.deserialize_messages(row["messages_json"])
             agent.step = row["step"]
@@ -312,12 +316,12 @@ class SessionManager:
         needed. Refuses while the loop is actively mid-turn (same guard as send_message):
         swapping the client or prompt out from under an in-flight streaming call is undefined.
 
-        None of the three are persisted to the database (unlike step_limit/goal/etc. in
-        db_row()) -- the API key deliberately never touches sqlite or the logs (see
-        _get_client()'s own masked-logging precedent for why that matters), and letting
-        model/system_prompt revert to their session-start values on a backend restart is an
-        acceptable trade for not adding a migration for two rarely-changed, easily-re-set
-        fields. Each argument left as None leaves that setting unchanged.
+        model and system_prompt are persisted (db_row() includes both, same as goal/step_limit)
+        so they survive a backend restart, same as any other session setting. The API key is
+        the one deliberate exception: it never touches sqlite or the logs (see _get_client()'s
+        own masked-logging precedent for why that matters) -- a restarted backend falls back to
+        config.ANTHROPIC_API_KEY / the SDK's own credential resolution for that session, same as
+        it would for a brand-new one. Each argument left as None leaves that setting unchanged.
         """
         design_session = self.get(session_id)
         if design_session.run_task is not None and not design_session.run_task.done():

@@ -30,6 +30,7 @@ export async function startSession(params: {
   stepLimit?: number
   autorun?: boolean
   model?: string
+  systemPrompt?: string
 }): Promise<{ sessionId: string }> {
   return req('/api/sessions', {
     method: 'POST',
@@ -38,7 +39,11 @@ export async function startSession(params: {
   })
 }
 
-export async function listModels(): Promise<{ models: ModelOption[]; default: string }> {
+export async function listModels(): Promise<{
+  models: ModelOption[]
+  default: string
+  defaultSystemPrompt: string
+}> {
   return req('/api/models')
 }
 

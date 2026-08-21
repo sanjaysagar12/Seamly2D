@@ -29,6 +29,8 @@ export function StartScreen({ onStarted }: Props) {
   const [selected, setSelected] = useState<string>('')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false)
   const [stepLimit, setStepLimit] = useState(60)
   const [autorun, setAutorun] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -50,6 +52,7 @@ export function StartScreen({ onStarted }: Props) {
       .then((data) => {
         setModels(data.models)
         setSelectedModel(data.default && data.models.some((m) => m.id === data.default) ? data.default : data.models[0]?.id ?? '')
+        setSystemPrompt(data.defaultSystemPrompt)
       })
       .catch((err) => setError(String(err)))
   }, [])
@@ -99,6 +102,7 @@ export function StartScreen({ onStarted }: Props) {
         stepLimit,
         autorun,
         model: selectedModel || undefined,
+        systemPrompt: systemPrompt.trim() || undefined,
       })
       onStarted(sessionId)
     } catch (err) {
@@ -211,6 +215,35 @@ export function StartScreen({ onStarted }: Props) {
           <input type="checkbox" checked={autorun} onChange={(e) => setAutorun(e.target.checked)} />
           Run automatically (uncheck to step through manually for debugging)
         </label>
+
+        <button
+          type="button"
+          className="link-button system-prompt-toggle"
+          onClick={() => setSystemPromptOpen((v) => !v)}
+        >
+          {systemPromptOpen ? '− hide system prompt' : '+ edit system prompt'}
+        </button>
+        {systemPromptOpen && (
+          <div className="field-col field-col-wide">
+            <label className="field-label" htmlFor="system-prompt">
+              System prompt
+            </label>
+            <textarea
+              id="system-prompt"
+              className="system-prompt-input"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              rows={10}
+            />
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => listModels().then((data) => setSystemPrompt(data.defaultSystemPrompt))}
+            >
+              reset to default
+            </button>
+          </div>
+        )}
 
         {error && <div className="start-error">{error}</div>}
 

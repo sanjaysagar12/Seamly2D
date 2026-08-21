@@ -21,6 +21,26 @@ logger = logging.getLogger("pattern_agent.agent_loop")
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
 
+# Every render.snapshot call below passes both of these explicitly. Leaving width/height
+# unset (as this used to) makes actiond's render.snapshot handler render at a 1:1
+# scene-unit-to-pixel mapping, capped only at 4096px on its longer side (see
+# scene_render_geometry.cpp's own memory-safety cap -- a general-purpose default, not an
+# Anthropic-specific one, and this Python layer is the wrong place to touch that C++ code
+# per this app's own "does not modify actiond" boundary, see README.md). A pattern that grows
+# large enough over a long session pushes past Anthropic's *separate*, stricter constraint on
+# multi-image requests: once a single request carries "many" images (every turn appends one to
+# self.messages, so any non-trivial session gets there fast), every image in it must be <=2000px
+# per dimension or the whole call is rejected with a 400 ("exceed max allowed size for
+# many-image requests") -- which surfaces to the user as a hard session-ending API error with no
+# actionable fix from their side. Passing both dimensions explicitly (not just one) is
+# deliberate: only one dimension is still derived from the pattern's own aspect ratio by
+# scene_render_geometry.cpp, so an unusually tall or wide piece could still push the *other*
+# dimension over 2000px. Fixing both bounds the image regardless of the pattern's shape, at the
+# cost of allowing non-uniform scaling (Qt::IgnoreAspectRatio) for extreme aspect ratios -- a
+# mild visual stretch the agent can still read, versus a hard failure it cannot recover from.
+SNAPSHOT_WIDTH = 1600
+SNAPSHOT_HEIGHT = 1600
+
 SYSTEM_PROMPT = """\
 You are a pattern-drafting agent operating Seamly2D headlessly through a fixed set of \
 construction tools (points, lines, curves, operations, pieces). You work through a \
@@ -126,7 +146,8 @@ class AgentSession:
     async def _try_render_initial_snapshot(self) -> dict[str, Any] | None:
         try:
             snap = await self.actiond.run_single(
-                "render.snapshot", path="step_0000.png", showPointNames=True
+                "render.snapshot", path="step_0000.png", showPointNames=True,
+                width=SNAPSHOT_WIDTH, height=SNAPSHOT_HEIGHT,
             )
         except (ActiondCrashError, ActiondTimeoutError) as exc:
             logger.warning("Initial snapshot failed: %s", exc)
@@ -412,7 +433,8 @@ class AgentSession:
         try:
             snap_name = f"step_{self.step:04d}.png"
             snap = await self.actiond.run_single(
-                "render.snapshot", path=snap_name, showPointNames=True
+                "render.snapshot", path=snap_name, showPointNames=True,
+                width=SNAPSHOT_WIDTH, height=SNAPSHOT_HEIGHT,
             )
             if snap["status"] == "ok":
                 image_path = Path(snap["result"]["path"])
@@ -574,7 +596,8 @@ class AgentSession:
         image_block: dict[str, Any] | None = None
         try:
             snap = await self.actiond.run_single(
-                "render.snapshot", path=f"resume_{self._message_count:03d}.png", showPointNames=True
+                "render.snapshot", path=f"resume_{self._message_count:03d}.png", showPointNames=True,
+                width=SNAPSHOT_WIDTH, height=SNAPSHOT_HEIGHT,
             )
             if snap["status"] == "ok":
                 image_path = Path(snap["result"]["path"])
