@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<smis>
+    <!--Body measurements for the shirt_front_piece action-layer example (examples/actionlayer/shirt_front_piece/action.json).
+    Illustrative adult-size values, not tied to a specific person; used to drive every formula in
+    that script via "op": "measurements.load" instead of hard-coded literal lengths.-->
+    <version>0.3.4</version>
+    <read-only>false</read-only>
+    <notes/>
+    <unit>cm</unit>
+    <pm_system>998</pm_system>
+    <personal>
+        <family-name/>
+        <given-name/>
+        <birth-date>1800-01-01</birth-date>
+        <gender>unknown</gender>
+        <email/>
+    </personal>
+    <body-measurements>
+        <m name="neck_circ" value="38"/>
+        <m name="bust_circ" value="96"/>
+        <m name="shoulder_length" value="13"/>
+        <m name="shoulder_tip_to_armfold_f" value="21"/>
+        <m name="neck_side_to_waist_f" value="42"/>
+    </body-measurements>
+</smis>

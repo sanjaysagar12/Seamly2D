@@ -1,0 +1,24 @@
+{
+    "_description": "Simple front shirt/bodice piece (half-front, center-front on the straight edge): a basic front bodice block skeleton driven by body measurements loaded from measurements.smis (neck_circ, bust_circ, shoulder_length, armhole_depth, front_waist_length) rather than literal placeholder lengths. A = top reference corner; A1 = CF neck point; A2 = neck/shoulder point; A3 = shoulder tip; A4 = underarm; A5 = side-seam hem; A6 = CF hem. Closed via a concave neckline spline (A1-A2), straight shoulder (A2-A3), a concave-outward armhole spline (A3-A4), straight side seam (A4-A5), straight hem (A5-A6), and straight center front (A6-A1), assembled into one piece via piece.addPatternPiece. Illustrative pipeline-demonstration proportions only, not a garment-accurate draft -- see README.md.",
+    "actions": [
+        { "op": "measurements.load", "path": "examples/actionlayer/shirt_front_piece/measurements.smis" },
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "A1", "basePoint": "A", "length": "neck_circ/6+15", "angle": "-90" },
+        { "op": "endLine", "name": "A2", "basePoint": "A", "length": "neck_circ/6", "angle": "0" },
+        { "op": "endLine", "name": "A3", "basePoint": "A2", "length": "shoulder_length", "angle": "-20" },
+        { "op": "endLine", "name": "A4h", "basePoint": "A", "length": "bust_circ/4+20", "angle": "0" },
+        { "op": "endLine", "name": "A4", "basePoint": "A4h", "length": "shoulder_tip_to_armfold_f", "angle": "-90" },
+        { "op": "endLine", "name": "A5", "basePoint": "A4", "length": "neck_side_to_waist_f-shoulder_tip_to_armfold_f", "angle": "-90" },
+        { "op": "endLine", "name": "A6", "basePoint": "A", "length": "neck_side_to_waist_f", "angle": "-90" },
+        { "op": "line", "firstPoint": "A2", "secondPoint": "A3" },
+        { "op": "line", "firstPoint": "A4", "secondPoint": "A5" },
+        { "op": "line", "firstPoint": "A5", "secondPoint": "A6" },
+        { "op": "line", "firstPoint": "A6", "secondPoint": "A1" },
+        { "op": "spline", "point1": "A1", "point4": "A2", "angle1": "0", "angle2": "250", "length1": "35", "length2": "20" },
+        { "op": "spline", "point1": "A3", "point4": "A4", "angle1": "-110", "angle2": "-90", "length1": "70", "length2": "60" },
+        { "op": "piece.addPatternPiece", "name": "Front", "nodes": ["A1", "A2", "A3", "A4", "A5", "A6"], "seamAllowanceWidth": "10" },
+        { "op": "pattern.dump" },
+        { "op": "render.snapshot", "path": "examples/actionlayer/shirt_front_piece/shirt_front_piece.png", "width": 600, "height": 800, "showPointNames": true },
+        { "op": "session.save", "path": "examples/actionlayer/shirt_front_piece/shirt_front_piece.val" }
+    ]
+}
