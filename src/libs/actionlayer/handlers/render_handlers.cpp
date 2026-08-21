@@ -53,6 +53,7 @@
 #include <QPainter>        // Provides QPainter, used to render the scene and draw highlight overlays into the QImage.
 #include <QPen>            // Provides Qt::NoPen, used to draw borderless highlight overlay rectangles.
 #include <QRectF>          // Provides QRectF, used throughout for the scene-space source rect and per-item bounds.
+#include <QScopedPointer>  // Provides QScopedPointer, giving ScopedPointNameVisibility's conditional (args-dependent) construction RAII cleanup without a manual delete.
 #include <QVector>         // Provides QVector, used to carry resolved highlight rects from the resolve loop to the draw loop.
 
 namespace
@@ -110,13 +111,48 @@ namespace
         outColor = parsed; // A valid "#RRGGBB" (or any other Qt-recognized color name) was supplied.
         return true; // Recognized value.
     }
+
+    // Temporarily overrides qApp->Settings()'s scene-wide point-name-label visibility flag for the
+    // duration of one render.snapshot call, restoring the previous value on scope exit (covering
+    // every return path below, including the image-save failure one) -- VCommonSettings is backed
+    // by the same on-disk ini this process shares with the interactive GUI (see
+    // actiond_application.cpp), so leaving it changed after this handler returns would leak into
+    // every later render in the same daemon session.
+    //
+    // VCommonSettings::getHidePointNames()/setHidePointNames() are confusingly named relative to
+    // what they actually control -- verified by reading VScenePoint::paint() (vscenepoint.cpp)
+    // directly: `if (!getHidePointNames()) { hide the label }  else { show it, per that point's own
+    // showPointName flag }`. So `true` is the value that makes labels showable (each point's own
+    // "showPointName" from basePoint/endLine/etc. still governs whether that specific one actually
+    // renders), and `false` force-hides every point's name label regardless of its own flag. This
+    // class exists specifically so render_handlers.cpp's own call site reads
+    // `ScopedPointNameVisibility(showPointNames)` in the natural, non-inverted sense -- the
+    // getHidePointNames()/setHidePointNames() naming inversion is pre-existing Seamly2D behavior,
+    // not something introduced here; do not "fix" the sense of the boolean below to match the
+    // setting's own name, that would invert the actual visual result.
+    class ScopedPointNameVisibility
+    {
+    public:
+        explicit ScopedPointNameVisibility(bool showPointNames)
+            : m_previous(qApp->Settings()->getHidePointNames())
+        {
+            qApp->Settings()->setHidePointNames(showPointNames); // See class comment: passing showPointNames straight through (not negated) is correct given getHidePointNames()'s actual paint-time semantics.
+        }
+        ~ScopedPointNameVisibility()
+        {
+            qApp->Settings()->setHidePointNames(m_previous); // Always restore, so a caller's global setting is never left mutated by this one render.
+        }
+    private:
+        bool m_previous;
+    };
 }
 
 // Implements "render.snapshot": rasterizes ctx.scene() (the draft scene) to an image file,
-// optionally overlaying semi-transparent highlight rectangles over named objects, and returns
-// metadata describing what was written. Every failure path returns ActionResult::failure() with
-// a specific, actionable message instead of throwing or crashing, matching the convention the
-// registry/engine already rely on (see ActionEngine::run()'s own "Unknown action op" handling).
+// optionally overlaying semi-transparent highlight rectangles over named objects and/or forcing
+// point-name labels (e.g. "A1", "A2") on or off via "showPointNames", and returns metadata
+// describing what was written. Every failure path returns ActionResult::failure() with a specific,
+// actionable message instead of throwing or crashing, matching the convention the registry/engine
+// already rely on (see ActionEngine::run()'s own "Unknown action op" handling).
 ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &ctx)
 {
     // --- target -----------------------------------------------------------------------------
@@ -309,6 +345,17 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
 
         highlighted.append(name); // This name resolved to a real, drawable graphics item.
         highlightRects.append(item->sceneBoundingRect()); // Its scene-space bounds, transformed to image pixels after the main render below.
+    }
+
+    // --- point-name label visibility ------------------------------------------------------------
+    // Only constructed (and only then does it touch the shared qApp->Settings() state at all) when
+    // the caller explicitly asks for it -- omitting "showPointNames" leaves whatever the pattern's
+    // own settings already have in effect, exactly like every other optional param on this op.
+    QScopedPointer<ScopedPointNameVisibility> pointNameVisibility;
+    if (args.contains(QStringLiteral("showPointNames")))
+    {
+        const bool showPointNames = args.value(QStringLiteral("showPointNames")).toBool(true);
+        pointNameVisibility.reset(new ScopedPointNameVisibility(showPointNames));
     }
 
     // --- render -------------------------------------------------------------------------------

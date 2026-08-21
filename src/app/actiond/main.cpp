@@ -84,6 +84,21 @@ int main(int argc, char *argv[])
         qputenv("QT_QPA_PLATFORM", "offscreen"); // Default to headless so actiond works in CI/containers with no display.
     }
 
+#if defined(Q_OS_WIN)
+    // The offscreen QPA platform's font database (QFreeTypeFontDatabase, confirmed by the
+    // exported symbols in qoffscreen.dll) only populates fonts from QT_QPA_FONTDIR -- unlike a
+    // real platform plugin, it never falls back to the system font directory on its own. Left
+    // unset, every text item this process ever draws (point-name labels, measurement labels, ...)
+    // renders as empty "tofu" glyph boxes: the label item still paints and is still positioned
+    // correctly, but with zero font families available, no glyph outlines exist to draw. Pointing
+    // at the real Windows font directory (unless the caller already set an explicit override) is
+    // what makes render.snapshot's rendered text actually legible instead of just present.
+    if (!qEnvironmentVariableIsSet("QT_QPA_FONTDIR"))
+    {
+        qputenv("QT_QPA_FONTDIR", "C:/Windows/Fonts");
+    }
+#endif
+
     ActiondApplication app(argc, argv); // Must exist (and be the QCoreApplication::instance()) before any pattern loading below.
 
     QCommandLineParser parser;

@@ -138,8 +138,10 @@ void ActionRegistry::registerBuiltinActions()
             param(QStringLiteral("highlight"), QStringLiteral("array"), false,
                 QStringLiteral("Object names to overlay with a semi-transparent red rectangle. A name that fails to resolve, or has no live graphics item, is silently added to the response's \"skippedHighlights\" rather than failing the whole render."),
                 QString(), QStringLiteral("string")),
+            param(QStringLiteral("showPointNames"), QStringLiteral("boolean"), false,
+                QStringLiteral("Literal flag: force point-name labels (e.g. \"A1\", \"A2\") on (true) or off (false) for this render, overriding the pattern's own scene-wide setting for the duration of this one call only. A point created with its own \"showPointName\": false (see basePoint/endLine/etc.) still never shows its label even when this is true -- this only controls the scene-wide toggle, not any individual point's own flag. Omit to leave the scene-wide setting exactly as the pattern/session already has it.")),
         },
-        QStringLiteral(R"({ "op": "render.snapshot", "path": "square.png", "width": 400, "height": 400, "highlight": ["A", "B"] })")));
+        QStringLiteral(R"({ "op": "render.snapshot", "path": "square.png", "width": 400, "height": 400, "highlight": ["A", "B"], "showPointNames": true })")));
 
     registerAction(QStringLiteral("pattern.resolveName"), &handlePatternResolveName, buildSchema(
         QStringLiteral("pattern.resolveName"), QStringLiteral("introspection"),
