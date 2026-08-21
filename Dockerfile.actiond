@@ -1,0 +1,182 @@
+# syntax=docker/dockerfile:1
+#
+# Seamly2D "actiond" action engine -- headless container image
+# ================================================================
+#
+# This builds ONLY the actiond binary (src/app/actiond), a headless daemon that loads a
+# .val pattern (+ optional measurements) and applies JSON actions to it via NDJSON over
+# stdin/stdout. It never builds the interactive Seamly2D GUI app or SeamlyMe.
+#
+# For downstream Dockerfiles that `FROM` this image:
+#   - Binary lives at /app/bin/actiond, also on PATH.
+#   - ENV QT_QPA_PLATFORM=offscreen is already set -- do not unset it unless you know why.
+#   - ENTRYPOINT is docker/actiond-entrypoint.sh, which execs the binary; pass actiond's own CLI
+#     flags as the image CMD/args, e.g. --pattern /data/input/foo.val --measurements
+#     /data/input/foo.smis --output-dir /data/output. Omitting --pattern/--actions starts the
+#     persistent NDJSON daemon (the normal mode) -- see src/app/actiond/session_server.h for the
+#     request/response protocol. Both --pattern and --actions are needed to run one script and
+#     exit instead (one-shot mode); that mode has no --output-dir, so any render.snapshot/
+#     export.scene/session.save path in the actions script resolves against the container's
+#     working directory (override it with `docker run -w /data/output ...` if you want relative
+#     output paths to land in that volume).
+#   - Volumes: /data/input (read-only patterns/measurements), /data/output (renders, saved .val).
+#   - The container starts as root, but only long enough for the entrypoint to chown a freshly
+#     bind-mounted /data/output to uid/gid 10001 (Docker bind mounts keep the host directory's
+#     original ownership, which is root's by default) before it hands off to actiond as uid/gid
+#     10001 via setpriv and never returns to root -- see docker/actiond-entrypoint.sh.
+#
+# Minimal daemon example, piping one NDJSON request line in and reading one back (tested):
+#   docker run -i --rm \
+#     -v "$PWD/examples/actionlayer/shirt_front_piece:/data/input:ro" \
+#     -v "$PWD/out-render:/data/output" \
+#     seamly2d-actiond:latest \
+#     --pattern /data/input/shirt_front_piece.val --measurements /data/input/measurements.smis \
+#     --output-dir /data/output \
+#     <<< '{"actions":[{"op":"pattern.dump"},{"op":"render.snapshot","path":"smoke.png","width":400,"height":400}]}'
+#   # -> smoke.png lands in ./out-render. Note --output-dir must be given explicitly whenever you
+#   # pass any args at all: `docker run <image> <args>` replaces this image's default CMD (which
+#   # is just ["--output-dir", "/data/output"]) outright rather than merging with it -- omitted,
+#   # actiond falls back to its own "./output" default, relative to WORKDIR /app, not the volume.
+
+# Debian trixie, not Ubuntu 24.04: actiond's vdomdocument.cpp uses QDomDocument::ParseResult,
+# added in Qt 6.5. Ubuntu 24.04's apt Qt6 is 6.4.2 (too old, confirmed by a failed build --
+# 'ParseResult' is not a member of 'QDomDocument'); Debian trixie carries Qt 6.8.2.
+ARG BASE_IMAGE_TAG=trixie-slim
+
+# ---------------------------------------------------------------------------------------------
+# Stage 1: builder -- full Qt6 dev toolchain, builds the static core libs + actiond only.
+# ---------------------------------------------------------------------------------------------
+FROM debian:${BASE_IMAGE_TAG} AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# qt6-base-dev pulls in Core/Gui/Widgets/Network/PrintSupport/Xml dev files as transitive
+# dependencies; Multimedia and Svg are separate Qt6 modules on Debian/Ubuntu and must be listed
+# explicitly. libxerces-c-dev is a genuine third-party dependency: VPatternConverter/VDomDocument
+# use it for XML schema validation (see actiond.pro's own comment on the -lxerces-c link line).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        qt6-base-dev \
+        qt6-base-dev-tools \
+        qt6-multimedia-dev \
+        qt6-svg-dev \
+        libxerces-c-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/usr/lib/qt6/bin:${PATH}"
+
+WORKDIR /src
+
+# Only what actiond actually needs to build: the whole src/libs static-lib tree (actiond links
+# 13 of its 15 sub-libs; the other 2 -- vobj, vtest -- are cheap and building the tree as one
+# qmake subdirs unit is what CI already validates, so we don't hand-roll a riskier subset build
+# order), actiond's own sources, and the two seamly2d/xml files VPattern::Parse() lives in
+# (actiond.pro pulls those in directly -- NOT the rest of src/app/seamly2d, which is the GUI
+# MainWindow/dialogs tree this image must never build).
+COPY common.pri ./
+COPY src/libs/ src/libs/
+COPY src/app/actiond/ src/app/actiond/
+COPY src/app/seamly2d/xml/ src/app/seamly2d/xml/
+
+# qmake's subdirs template only writes a Makefile for the .pro file you point it at directly --
+# nested subdirs' Makefiles are generated lazily, on demand, the first time `make` descends into
+# them (qmake's own generated rule: `test -e Makefile || qmake -o Makefile <subdir>.pro`). So each
+# of the two things we actually need built (the libs/ subdirs tree, and actiond itself) gets its
+# own direct qmake invocation here, rather than qmaking the top-level Seamly2D.pro/src.pro/app.pro
+# chain -- that chain also lists seamlyme/seamly2d (the GUI apps), which aren't in this build
+# context at all, and going through it would try to recurse into them and fail.
+RUN cd src/libs && qmake6 -o Makefile CONFIG+=release libs.pro && make -j"$(nproc)"
+
+RUN cd src/app/actiond && qmake6 -o Makefile CONFIG+=release actiond.pro && make -j"$(nproc)"
+
+RUN test -x src/app/actiond/bin/actiond
+
+# ---------------------------------------------------------------------------------------------
+# Stage 2: runtime -- just the shared libs actiond actually links against, no compilers, no
+# dev headers, no X11.
+# ---------------------------------------------------------------------------------------------
+FROM debian:${BASE_IMAGE_TAG} AS runtime
+
+ARG BASE_IMAGE_TAG
+
+LABEL org.opencontainers.image.title="seamly2d-actiond" \
+      org.opencontainers.image.description="Headless Seamly2D action engine: loads a .val pattern and applies NDJSON actions over stdin/stdout under Qt's offscreen QPA platform." \
+      org.opencontainers.image.source="https://github.com/fashionfreedom/seamly2d" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.base.name="debian:${BASE_IMAGE_TAG}"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime-only counterparts of the builder's dev packages, plus:
+#   - qt6-qpa-plugins: ships platforms/libqoffscreen.so (not bundled into libqt6gui6 itself on
+#     Debian), the plugin actiond's forced QT_QPA_PLATFORM=offscreen actually loads at
+#     QApplication construction.
+#   - fontconfig + fonts-dejavu-core: the offscreen platform's font database still goes through
+#     fontconfig/freetype on Linux (unlike the Windows QT_QPA_FONTDIR path in actiond's
+#     main.cpp); with zero fonts installed, render.snapshot's point/measurement labels would
+#     draw as empty tofu boxes instead of legible text.
+#   - gstreamer1.0-plugins-base: QtMultimedia's Linux backend resolves a GStreamer pipeline at
+#     runtime even though actiond never plays audio (vtools' PatternPieceDialog links a
+#     QSoundEffect symbol actiond never calls) -- Seamly2D's own CI calls this out as a real
+#     QtMultimedia runtime dependency, not just a build-time one.
+#
+# Size note: libqt6gui6 hard-Depends on
+# libglx0/libegl1, and Debian's packaging requires an actual GLX/EGL ICD to satisfy that --
+# there is no "headless" variant -- so apt pulls the full Mesa driver stack (libgl1-mesa-dri,
+# mesa-libgallium) and, with it, libllvm19 as the llvmpipe software rasterizer's dependency.
+# ~165MB of this image is that stack alone. actiond never issues a real GL call under the
+# offscreen QPA platform (it rasterizes via QPainter/QImage), so none of it is ever dlopen'd at
+# runtime -- but it's a hard install-time dependency of stock Debian Qt6 packages, not something
+# `--no-install-recommends` (already used below) can avoid, and deleting the files post-install
+# would desync dpkg's package database in an image meant to be FROM'd by other Dockerfiles, so
+# it's left in place rather than hand-pruned.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libqt6core6t64 \
+        libqt6gui6 \
+        libqt6widgets6 \
+        libqt6xml6 \
+        libqt6printsupport6 \
+        libqt6svg6 \
+        libqt6multimedia6 \
+        libqt6multimediawidgets6 \
+        qt6-qpa-plugins \
+        libxerces-c3.2t64 \
+        fontconfig \
+        fonts-dejavu-core \
+        gstreamer1.0-plugins-base \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV QT_QPA_PLATFORM=offscreen \
+    QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt6/plugins \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    HOME=/home/actiond \
+    PATH="/app/bin:${PATH}"
+
+# setpriv (see the entrypoint script) changes uid/gid but does not touch environment variables,
+# so HOME above must already point at this user's home directory before it runs -- otherwise
+# fontconfig inherits root's $HOME, can't write its cache there as uid 10001, and every
+# render.snapshot logs a "Fontconfig error: No writable cache directories" warning.
+RUN groupadd --gid 10001 actiond \
+    && useradd --uid 10001 --gid actiond --create-home --shell /usr/sbin/nologin actiond
+
+WORKDIR /app
+COPY --from=builder --chown=actiond:actiond /src/src/app/actiond/bin/actiond /app/bin/actiond
+COPY --chmod=0755 docker/actiond-entrypoint.sh /usr/local/bin/actiond-entrypoint.sh
+
+# /data/input: read-only mount for source .val patterns and measurement files.
+# /data/output: read-write mount for render.snapshot PNGs, export.scene SVGs, session.save .val.
+RUN mkdir -p /data/input /data/output && chown -R actiond:actiond /data /app
+VOLUME ["/data/input", "/data/output"]
+
+# Deliberately staying root here (not `USER actiond`): the entrypoint script itself does the
+# privilege drop, after fixing up /data/output's ownership for whatever host directory got bind-
+# mounted onto it -- see docker/actiond-entrypoint.sh's own header comment for why. The actiond
+# process itself always ends up running as uid/gid 10001, never as root.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/app/bin/actiond", "--list-tools", "--format=ai"]
+
+ENTRYPOINT ["/usr/local/bin/actiond-entrypoint.sh"]
+CMD ["--output-dir", "/data/output"]

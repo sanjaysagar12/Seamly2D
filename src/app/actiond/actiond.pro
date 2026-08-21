@@ -202,6 +202,17 @@ win32-msvc: LIBS += -L$${PWD}/../../libs/xerces-c/msvc/lib -lxerces-c_3
 win32-arm64-msvc: LIBS += -L$${PWD}/../../libs/xerces-c/msvc-arm64/lib -lxerces-c_3
 win32-g++: LIBS += -L$${PWD}/../../libs/xerces-c/mingw/lib -lxerces-c
 
+# GNU ld resolves static libs in a single left-to-right pass, pulling in only the object files
+# needed by symbols already known-undefined at the point it reaches each -l flag. actionlayer.a
+# (export_handlers.cpp's "export.scene" handler) needs VDxfPaintDevice from vdxf.a, which is
+# listed earlier above -- by the time ld reaches -lactionlayer, it has already finished with
+# vdxf.a and won't go back for it, so a plain link fails with "undefined reference to
+# VDxfPaintDevice::...". MSVC's linker has no such ordering requirement, which is why this only
+# breaks the unix/mingw build. --start-group/--end-group makes ld re-scan the whole group until
+# every symbol resolves, independent of list order -- the standard fix instead of hand-ordering
+# a static-lib dependency chain that will keep growing.
+unix|win32-g++: LIBS = -Wl,--start-group $$LIBS -Wl,--end-group
+
 win32 {
     copyToDestdir($${PWD}/$$INSTALL_XERCES, $$shell_path($${OUT_PWD}/$$DESTDIR))
 }
