@@ -38,6 +38,7 @@
 
 #include <QFileInfo>      // Provides QFileInfo::exists(), used for the fast, clear existence check below.
 #include <QGraphicsScene> // Provides QGraphicsScene, the type m_currentScene aliases (see the header's own comment on why this is a member, not a local).
+#include <QUndoStack>     // Provides QUndoStack, whose beginMacro()/endMacro() runActions() below wires into ActionEngine::run()'s macro-grouping callbacks (Phase 12).
 
 namespace
 {
@@ -218,9 +219,88 @@ PatternSession::~PatternSession()
     delete m_data;
 }
 
+// Phase 12 (undo/redo): supplies ActionEngine::run() with the two callbacks that group every
+// VUndoCommand a single JSON action's handler pushes into one QUndoStack macro -- see
+// action_engine.h's own comment on BeginMutatingActionFn/EndMutatingActionFn for why this wiring
+// lives here (in PatternSession) rather than inside ActionEngine itself: it is the one place in
+// this call chain allowed to depend on qApp/QUndoStack, keeping the action-layer library itself
+// free of that dependency, matching the same separation every earlier phase has preserved (see
+// docs/ARCHITECTURE.md's ADR). abortOnFirstError is forwarded unchanged; only the two new trailing
+// arguments are new versus the pre-Phase-12 call this replaces.
+//
+// VERIFIED (Phase 12 investigation, matching this constructor's own qApp->setCurrentScene()/
+// setSceneView() comment above): actiond's main() (main.cpp) never calls
+// QCoreApplication::exec() -- there is no Qt event loop running in this process, ever, in either
+// one-shot or daemon mode. VUndoCommand::RedoFullParsing() (vundocommand.cpp) -- the shared base
+// every mutating tool's undo command (AddToCalc, SaveToolOptions, SavePieceOptions, ...) either
+// inherits or reimplements identically -- reacts to this correctly, not by accident: on a
+// command's *very first* execution (redoFlag == false, i.e. the redo() Qt's own QUndoStack::
+// push() calls synchronously the moment AddToFile()/SaveOption()/etc. pushes a freshly-created
+// command), it takes the `QApplication::postEvent(doc, new LiteParseEvent())` branch instead of
+// emitting FullUpdateFromFile() -- and that posted event is simply never delivered in this
+// process, permanently. This is harmless, not a silently-broken feature: at that exact moment the
+// in-memory VContainer/scene were *already* built directly by the tool's own Create() factory
+// (VContainer::AddPoint(), scene->addItem(), ...) moments earlier in the same call, wholly
+// independent of AddToCalc/SaveToolOptions -- nothing downstream is out of sync yet, so no
+// reparse is actually needed. redoFlag is set true unconditionally right after (regardless of
+// which branch ran), so on the *second and later* call to that same command's redo() -- which is
+// exactly what "session.redo" (session_undo_handlers.cpp) triggers after a prior "session.undo",
+// and what AddToCalc::undo() (addtocalc.cpp) does on *every* call, not just later ones -- the
+// synchronous `emit NeedFullParsing(); emit doc->FullUpdateFromFile();` branch runs instead. A
+// direct-connection Qt signal emission executes its slots inline, in the emitting call's own
+// stack frame, with no event-loop involvement at all -- so THAT part of the mechanism (each
+// already-alive VAbstractTool subclass's own FullUpdateFromFile() override re-running) does fire
+// correctly in this headless daemon despite the dead posted event.
+//
+// CRITICAL FINDING, VERIFIED BY DIRECT actiond RUN (Phase 12 -- do not assume this away in a
+// future change, see session_undo_handlers.h's own header comment for the full writeup and a
+// reproduction script): that per-tool refresh does NOT delete an object whose DOM element
+// "session.undo" just removed. VDrawTool::ReadAttributes() (vdrawtool.cpp) -- what every
+// FullUpdateFromFile() override ultimately calls -- does `doc->elementById(m_id, getTagName())`
+// and, finding nothing, just `qCWarning`s "Can't find tool with id" and returns, leaving the
+// existing in-memory VPointF/tool object (and its scene item) exactly as it was. There is no
+// object-deletion mechanism anywhere in this codebase yet (matching the already-documented Phase
+// 9 gap: "no delete ... action existed yet for any object type") -- undo included. Net effect,
+// reproduced directly: after "session.undo" empties the stack, "pattern.dump"/"render.snapshot"/
+// "pattern.resolveName" still report the "undone" objects, completely unchanged, because they all
+// read the same live VContainer/scene this cascade never actually prunes. "session.save"
+// immediately after the same undo DOES write a correctly-reverted (smaller) DOM to disk -- the
+// AddToCalc::undo() DOM removal itself is genuinely correct; only the live in-memory mirror is
+// stale. This is NOT a Phase 12 regression to fix here: it is a pre-existing property of how
+// undo/redo already worked (the interactive GUI has no separate "prune VContainer" step either,
+// as far as this investigation traced) -- Phase 12 exposes it to a headless/AI caller for the
+// first time, so it is flagged here at maximum visibility rather than silently inherited.
 QJsonDocument PatternSession::runActions(const QJsonDocument &script, bool abortOnFirstError)
 {
-    return m_engine.run(script, m_context, abortOnFirstError);
+    // KNOWN GAP (documented, not silently shipped): PatternPieceTool::ToolCreation() and
+    // InternalPathTool::ToolCreation() (pattern_piece_tool.cpp/internal_path_tool.cpp) each call
+    // `qApp->getUndoStack()->endMacro()` unconditionally whenever typeCreation != Source::FromTool
+    // -- which is always true for piece_handlers.cpp's calls (they pass Source::FromGui) -- with
+    // NO matching beginMacro() of their own on that code path (only the *dialog*-based Create()
+    // overloads, which this action layer never calls, open one -- see union_tool.cpp/
+    // pattern_piece_tool.cpp's own beginMacro("...") call sites for the GUI-only path this isn't).
+    // Before Phase 12, this was a harmless no-op: QUndoStack::endMacro() with an empty macro_stack
+    // just logs "no matching beginMacro()" via qWarning and returns. Since Phase 12 wraps every
+    // mutating action in its own outer beginMacro()/endMacro() (below), that inner stray
+    // endMacro() call now matches and closes THIS macro instead -- the moment
+    // PatternPieceTool::ToolCreation()/InternalPathTool::ToolCreation() returns, which for
+    // "piece.addPatternPiece"/"piece.internalPath" is also the last DOM-mutating step in the
+    // handler, so the macro still ends up containing the whole action's real mutation either way.
+    // Net effect verified: the qWarning noise is actually *fixed* as a side effect (our
+    // beginMacro() is now the "matching" one), and this loop's own endMutatingAction() call
+    // afterward becomes a harmless second, empty-macro_stack no-op of its own. This would only
+    // become a real problem if a future change to either ToolCreation() override pushed another
+    // undo command *after* this inner endMacro() runs (there currently is none) -- flagged here so
+    // that future change doesn't quietly break "one JSON action = one undo step" for these two ops.
+    auto beginMutatingAction = [](const QString &label)
+    {
+        qApp->getUndoStack()->beginMacro(label);
+    };
+    auto endMutatingAction = []()
+    {
+        qApp->getUndoStack()->endMacro();
+    };
+    return m_engine.run(script, m_context, abortOnFirstError, beginMutatingAction, endMutatingAction);
 }
 
 bool PatternSession::save(const QString &path, QString &error)

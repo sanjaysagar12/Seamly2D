@@ -91,6 +91,9 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("point.edit"));                  // 20 Aug, 2026: mutating edit-in-place for an existing point's formula/coordinates, implemented in point_edit_handlers.cpp.
     tools.append(QStringLiteral("session.save"));                // 20 Aug, 2026: in-script pattern save, implemented in session_handlers.cpp.
     tools.append(QStringLiteral("session.close"));                // 20 Aug, 2026: session-lifecycle no-op, implemented in session_handlers.cpp.
+    tools.append(QStringLiteral("session.undo"));                 // Phase 12 (22 Aug, 2026): undo the last N mutating actions, implemented in session_undo_handlers.cpp.
+    tools.append(QStringLiteral("session.redo"));                 // Phase 12 (22 Aug, 2026): redo the last N undone actions, implemented in session_undo_handlers.cpp.
+    tools.append(QStringLiteral("session.undoStatus"));           // Phase 12 (22 Aug, 2026): read-only undo-stack introspection, implemented in session_undo_handlers.cpp.
 
     QJsonObject payload; // Wraps the array under its documented output key.
     payload["tools"] = tools; // "tools": every action op this action layer currently supports.

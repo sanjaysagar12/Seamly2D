@@ -131,6 +131,18 @@ ActionResult handlePieceInsertNodes(const QJsonObject &args, const ActionContext
 // inside the geometric merge helpers, possibly a GUI-oriented assumption e.g. a QMessageBox call
 // on a merge-geometry failure path) is flagged here as explicit follow-up work rather than
 // guessed at. Every other op in this file was exercised successfully via a real actiond run.
+//
+// KNOWN GAP (documented, not silently shipped -- Phase 12 undo/redo investigation): even setting
+// the segfault aside, UnionTool::Create()'s raw (id-based) overload -- the one this handler calls
+// -- never pushes a QUndoCommand at all: UnionTool does not override VAbstractTool::ToolCreation()
+// (unlike PatternPieceTool/InternalPathTool, which do -- see those two classes' own ToolCreation()
+// for the ADDITIONAL macro-imbalance quirk pattern_session.cpp documents), so its base-class
+// ToolCreation() calls AddToFile() -> UnionTool::AddToFile() -> AddToModeling(), which appends
+// directly to the live DOM (QDomElement::appendChild()) with no undo command wrapping any of it.
+// If this op is ever un-gapped, "session.undo" would still successfully open/close a macro around
+// it (ActionSchema::mutatesPattern is true for category "piece"), but that macro would be empty --
+// undoing it would not actually revert the union. Flagged here alongside the pre-existing segfault
+// gap so a future fix addresses both, not just the crash.
 ActionResult handlePieceUnion(const QJsonObject &args, const ActionContext &ctx);
 
 #endif // PIECE_HANDLERS_H
