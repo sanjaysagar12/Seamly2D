@@ -47,12 +47,18 @@ export interface SessionSummary {
   step: number
   goal: string
   stopReason: string | null
+  model: string
 }
 
 export interface SessionDetail extends SessionSummary {
   stepLimit: number
   finalSummary: string | null
   valUrl: string | null
+}
+
+export interface ModelOption {
+  id: string
+  label: string
 }
 
 export const STOP_REASON_LABELS: Record<string, string> = {

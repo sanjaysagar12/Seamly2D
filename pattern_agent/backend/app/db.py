@@ -46,7 +46,23 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, seq);
 """
 
+# Columns added after the initial schema shipped -- CREATE TABLE IF NOT EXISTS above
+# is a no-op against a pre-existing sessions.db from before one of these existed, so
+# each needs its own idempotent ALTER TABLE. (name, column DDL) pairs, applied in order.
+_MIGRATIONS: list[tuple[str, str]] = [
+    ("model", "ALTER TABLE sessions ADD COLUMN model TEXT"),
+]
+
 _connection: aiosqlite.Connection | None = None
+
+
+async def _apply_migrations(conn: aiosqlite.Connection) -> None:
+    async with conn.execute("PRAGMA table_info(sessions)") as cursor:
+        existing_columns = {row["name"] for row in await cursor.fetchall()}
+    for column_name, ddl in _MIGRATIONS:
+        if column_name not in existing_columns:
+            await conn.execute(ddl)
+    await conn.commit()
 
 
 async def init_db(db_path: Path = config.DB_PATH) -> None:
@@ -56,6 +72,7 @@ async def init_db(db_path: Path = config.DB_PATH) -> None:
     _connection.row_factory = aiosqlite.Row
     await _connection.executescript(_SCHEMA)
     await _connection.commit()
+    await _apply_migrations(_connection)
 
 
 async def close_db() -> None:
@@ -107,12 +124,13 @@ async def upsert_session(row: dict[str, Any]) -> None:
     await conn.execute(
         """
         INSERT INTO sessions
-            (session_id, goal, step_limit, status, step, stop_reason, final_summary,
+            (session_id, goal, model, step_limit, status, step, stop_reason, final_summary,
              measurements_path, output_dir, val_path, messages_json, created_at, updated_at)
         VALUES
-            (:session_id, :goal, :step_limit, :status, :step, :stop_reason, :final_summary,
+            (:session_id, :goal, :model, :step_limit, :status, :step, :stop_reason, :final_summary,
              :measurements_path, :output_dir, :val_path, :messages_json, :created_at, :updated_at)
         ON CONFLICT(session_id) DO UPDATE SET
+            model = excluded.model,
             step_limit = excluded.step_limit,
             status = excluded.status,
             step = excluded.step,

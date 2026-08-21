@@ -322,6 +322,20 @@ class AgentSession:
             }
         )
 
+    @staticmethod
+    def _thinking_and_effort_kwargs(model: str) -> dict[str, Any]:
+        """claude-haiku-4-5 is the odd one out among SELECTABLE_MODELS: it doesn't
+        support `thinking: {"type": "adaptive"}` or `output_config.effort` the way
+        Opus/Sonnet 5 and Sonnet 4.6 do -- sending either returns a 400. Simplest
+        correct behavior is to just run Haiku without extended thinking rather than
+        reach for its older budget_tokens-style config."""
+        if model == "claude-haiku-4-5":
+            return {}
+        return {
+            "thinking": {"type": "adaptive", "display": "summarized"},
+            "output_config": {"effort": config.ANTHROPIC_EFFORT},
+        }
+
     async def _call_claude(self):
         self._repair_orphaned_tool_uses()
         step_for_events = self.step + 1
@@ -329,11 +343,10 @@ class AgentSession:
             model=self.model,
             max_tokens=config.ANTHROPIC_MAX_TOKENS,
             system=SYSTEM_PROMPT,
-            thinking={"type": "adaptive", "display": "summarized"},
-            output_config={"effort": config.ANTHROPIC_EFFORT},
             tools=self.tools,
             tool_choice={"type": "any", "disable_parallel_tool_use": True},
             messages=self.messages,
+            **self._thinking_and_effort_kwargs(self.model),
         ) as stream:
             async for event in stream:
                 if event.type == "content_block_delta":

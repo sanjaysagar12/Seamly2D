@@ -49,8 +49,10 @@ async def test_session_survives_a_simulated_restart(tmp_path, monkeypatch):
         measurements_path=None,
         step_limit=5,
         autorun=False,
+        model="claude-haiku-4-5",
     )
     session_id = design_session.session_id
+    assert design_session.agent.model == "claude-haiku-4-5"
 
     first_run = ScriptedClaude(
         [
@@ -78,6 +80,7 @@ async def test_session_survives_a_simulated_restart(tmp_path, monkeypatch):
 
     reloaded = sm2.get(session_id)
     assert reloaded.agent.goal == "Draw a single point named A"
+    assert reloaded.agent.model == "claude-haiku-4-5"
     assert reloaded.agent.status == "complete"
     assert reloaded.agent.stop_reason == "agent_complete"
     assert reloaded.agent.final_summary == "Drew point A."

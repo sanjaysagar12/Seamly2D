@@ -186,7 +186,11 @@ input[type='number']:focus {
 }
 
 .field-col-narrow {
-  flex: 0 0 120px;
+  flex: 0 0 84px;
+}
+
+.field-col-model {
+  flex: 0 0 172px;
 }
 
 select,

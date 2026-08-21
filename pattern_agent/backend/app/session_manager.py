@@ -61,6 +61,7 @@ class DesignSession:
         return {
             "session_id": self.session_id,
             "goal": agent.goal,
+            "model": agent.model,
             "step_limit": agent.step_limit,
             "status": agent.status,
             "step": agent.step,
@@ -114,6 +115,7 @@ class SessionManager:
                 "step": s.agent.step,
                 "goal": s.agent.goal,
                 "stopReason": s.agent.stop_reason,
+                "model": s.agent.model,
             }
             for s in self._sessions.values()
         ]
@@ -151,7 +153,14 @@ class SessionManager:
         pattern_path: Path | None = None,
         step_limit: int = config.DEFAULT_STEP_LIMIT,
         autorun: bool = True,
+        model: str | None = None,
     ) -> DesignSession:
+        if model is not None and model not in config.SELECTABLE_MODELS:
+            raise ValueError(
+                f"Unknown model {model!r}; must be one of {sorted(config.SELECTABLE_MODELS)}"
+            )
+        resolved_model = model or config.ANTHROPIC_MODEL
+
         session_id = uuid.uuid4().hex[:12]
         output_dir = config.SESSIONS_DIR / session_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -177,6 +186,7 @@ class SessionManager:
             goal=goal,
             emit=self._make_emit(ref),
             step_limit=step_limit,
+            model=resolved_model,
         )
 
         design_session = DesignSession(session_id, agent, created_at=_now())
@@ -227,6 +237,7 @@ class SessionManager:
                 goal=row["goal"],
                 emit=self._make_emit(ref),
                 step_limit=row["step_limit"],
+                model=row["model"] or config.ANTHROPIC_MODEL,
             )
             agent.messages = db.deserialize_messages(row["messages_json"])
             agent.step = row["step"]

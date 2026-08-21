@@ -60,6 +60,15 @@
   color: var(--ink-faint);
 }
 
+.model-badge {
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+
 .status-pill {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;

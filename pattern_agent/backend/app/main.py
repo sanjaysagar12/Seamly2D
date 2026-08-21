@@ -69,6 +69,18 @@ async def upload_measurement(file: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+@app.get("/api/models")
+async def list_models():
+    return {
+        "models": [{"id": model_id, "label": label} for model_id, label in config.SELECTABLE_MODELS.items()],
+        "default": config.ANTHROPIC_MODEL,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Sessions
 # ---------------------------------------------------------------------------
 
@@ -77,6 +89,7 @@ class StartSessionRequest(BaseModel):
     measurementsFilename: Optional[str] = None
     stepLimit: Optional[int] = None
     autorun: bool = True
+    model: Optional[str] = None
 
 
 @app.post("/api/sessions")
@@ -94,7 +107,10 @@ async def start_session(req: StartSessionRequest):
             measurements_path=measurements_path,
             step_limit=req.stepLimit or config.DEFAULT_STEP_LIMIT,
             autorun=req.autorun,
+            model=req.model,
         )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
         logger.exception("Failed to start session")
         raise HTTPException(500, f"Failed to start session: {exc}") from exc
@@ -120,6 +136,7 @@ async def get_session(session_id: str):
         "step": agent.step,
         "stepLimit": agent.step_limit,
         "goal": agent.goal,
+        "model": agent.model,
         "stopReason": agent.stop_reason,
         "finalSummary": agent.final_summary,
         "valUrl": f"/files/{session_id}/final.val" if agent.final_val_path else None,

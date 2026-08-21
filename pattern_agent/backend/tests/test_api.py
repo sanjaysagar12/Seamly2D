@@ -117,3 +117,54 @@ async def test_start_session_surfaces_missing_credentials_cleanly(monkeypatch):
         # initialize() must tolerate that and still reach the first Claude call.
         snapshot_events = [e for e in design_session.history if e["type"] == "snapshot_ready"]
         assert len(snapshot_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_models():
+    from app import config
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/models")
+        assert resp.status_code == 200
+        body = resp.json()
+        ids = {m["id"] for m in body["models"]}
+        assert ids == {"claude-haiku-4-5", "claude-sonnet-5", "claude-sonnet-4-6"}
+        assert body["default"] == config.ANTHROPIC_MODEL
+
+
+@pytest.mark.asyncio
+async def test_start_session_rejects_unknown_model(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/sessions",
+            json={"goal": "Draw a line", "model": "gpt-5", "autorun": False},
+        )
+        assert resp.status_code == 400, resp.text
+        assert "gpt-5" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_start_session_honors_requested_model(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/sessions",
+            json={"goal": "Draw a line", "model": "claude-haiku-4-5", "autorun": False},
+        )
+        assert resp.status_code == 200, resp.text
+        session_id = resp.json()["sessionId"]
+
+        resp = await client.get(f"/api/sessions/{session_id}")
+        assert resp.json()["model"] == "claude-haiku-4-5"

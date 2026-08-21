@@ -102,6 +102,19 @@ Everything for the loop itself lives in `backend/app/agent_loop.py`, `AgentSessi
   `assert_valid_message_history()` checks this invariant on scripted transcripts so a
   regression here doesn't need a live API call to catch.
 
+**Model selection:** default is `claude-sonnet-5` (`config.ANTHROPIC_MODEL`, overridable
+via `.env`); the start screen's Model dropdown offers Claude Haiku 4.5, Sonnet 5, and
+Sonnet 4.6 (`config.SELECTABLE_MODELS`, served to the frontend via `GET /api/models` so
+the two never drift apart), fixed at session start and stored per-session (`model`
+column, included in `db_row()` so a chat-revived or backend-restart-reloaded session
+keeps using the model it started with). **`claude-haiku-4-5` is the odd one out**: unlike
+Opus 5/Sonnet 5/Sonnet 4.6, it doesn't support `thinking: {"type": "adaptive"}` or
+`output_config.effort` -- sending either returns a 400. `AgentSession.
+_thinking_and_effort_kwargs()` omits both for Haiku rather than reaching for its older
+`budget_tokens`-style config; if you add a fourth selectable model, check the
+`shared/model-migration.md` / thinking-support table in the `claude-api` skill before
+assuming it takes the same kwargs as Sonnet 5.
+
 **Single source of truth for `actiond`:** `AgentSession.actiond` is reassigned in place
 whenever the subprocess is respawned (crash recovery, chat revival). `DesignSession`
 deliberately does *not* keep its own copy -- an earlier version did, and it went stale

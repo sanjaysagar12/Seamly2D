@@ -282,3 +282,26 @@ async def test_chat_message_revives_a_completed_session(tmp_path):
     assert agent.stop_reason == "agent_complete"
     assert agent.final_summary == "Added point B."
     assert_valid_message_history(agent.messages)
+
+
+def test_haiku_omits_thinking_and_effort_kwargs():
+    """claude-haiku-4-5 doesn't support thinking:{"type":"adaptive"} or
+    output_config.effort -- sending either returns a 400. Every other selectable
+    model wants both."""
+    assert AgentSession._thinking_and_effort_kwargs("claude-haiku-4-5") == {}
+
+    for model in ("claude-sonnet-5", "claude-sonnet-4-6", "claude-opus-5"):
+        kwargs = AgentSession._thinking_and_effort_kwargs(model)
+        assert kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
+        assert kwargs["output_config"] == {"effort": config.ANTHROPIC_EFFORT}
+
+
+def test_selectable_models_are_internally_consistent():
+    # Deliberately does NOT assert config.ANTHROPIC_MODEL is one of these: that value
+    # is resolved from this developer's own environment/.env at import time (see
+    # config.py's load_dotenv()) and legitimately can be set to something outside the
+    # frontend's curated dropdown for local testing -- asserting on it here would make
+    # this test's pass/fail depend on whoever's machine runs it.
+    assert "claude-haiku-4-5" in config.SELECTABLE_MODELS
+    assert "claude-sonnet-5" in config.SELECTABLE_MODELS
+    assert "claude-sonnet-4-6" in config.SELECTABLE_MODELS

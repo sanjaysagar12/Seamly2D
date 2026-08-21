@@ -1,4 +1,4 @@
-import type { SessionDetail, SessionSummary } from './types'
+import type { ModelOption, SessionDetail, SessionSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
@@ -29,12 +29,17 @@ export async function startSession(params: {
   measurementsFilename?: string
   stepLimit?: number
   autorun?: boolean
+  model?: string
 }): Promise<{ sessionId: string }> {
   return req('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
+}
+
+export async function listModels(): Promise<{ models: ModelOption[]; default: string }> {
+  return req('/api/models')
 }
 
 export async function getSession(sessionId: string): Promise<SessionDetail> {

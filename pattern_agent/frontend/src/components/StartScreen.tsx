@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { listMeasurements, listSessions, startSession, uploadMeasurement } from '../lib/api'
-import type { SessionSummary } from '../lib/types'
+import { listMeasurements, listModels, listSessions, startSession, uploadMeasurement } from '../lib/api'
+import type { ModelOption, SessionSummary } from '../lib/types'
 import { STOP_REASON_LABELS } from '../lib/types'
 import './StartScreen.css'
 
@@ -15,7 +15,7 @@ function SessionRow({ session, onOpen }: { session: SessionSummary; onOpen: () =
       <span className="session-row-info">
         <span className="session-row-goal">{session.goal || '(no goal set)'}</span>
         <span className="session-row-meta mono">
-          step {session.step}
+          step {session.step} · {session.model}
           {session.stopReason ? ` · ${STOP_REASON_LABELS[session.stopReason] ?? session.stopReason}` : ''}
         </span>
       </span>
@@ -27,6 +27,8 @@ export function StartScreen({ onStarted }: Props) {
   const [goal, setGoal] = useState('')
   const [measurements, setMeasurements] = useState<string[]>([])
   const [selected, setSelected] = useState<string>('')
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [selectedModel, setSelectedModel] = useState<string>('')
   const [stepLimit, setStepLimit] = useState(60)
   const [autorun, setAutorun] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -39,6 +41,15 @@ export function StartScreen({ onStarted }: Props) {
       .then((files) => {
         setMeasurements(files)
         if (files.length > 0) setSelected(files[0])
+      })
+      .catch((err) => setError(String(err)))
+  }, [])
+
+  useEffect(() => {
+    listModels()
+      .then((data) => {
+        setModels(data.models)
+        setSelectedModel(data.default && data.models.some((m) => m.id === data.default) ? data.default : data.models[0]?.id ?? '')
       })
       .catch((err) => setError(String(err)))
   }, [])
@@ -87,6 +98,7 @@ export function StartScreen({ onStarted }: Props) {
         measurementsFilename: selected || undefined,
         stepLimit,
         autorun,
+        model: selectedModel || undefined,
       })
       onStarted(sessionId)
     } catch (err) {
@@ -165,6 +177,19 @@ export function StartScreen({ onStarted }: Props) {
                 e.target.value = ''
               }}
             />
+          </div>
+
+          <div className="field-col field-col-model">
+            <label className="field-label" htmlFor="model">
+              Model
+            </label>
+            <select id="model" value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="field-col field-col-narrow">

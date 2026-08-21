@@ -70,6 +70,7 @@ function StepEntry({
 export function LiveSession({ sessionId, onNewSession }: Props) {
   const state = useSessionSocket(sessionId)
   const [goal, setGoal] = useState<string>('')
+  const [model, setModel] = useState<string>('')
   const [stepLimit, setStepLimit] = useState<number>(0)
   const [selectedStep, setSelectedStep] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -84,6 +85,7 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
       .then((detail) => {
         setGoal(detail.goal)
         setStepLimit(detail.stepLimit)
+        setModel(detail.model)
       })
       .catch(() => {})
   }, [sessionId])
@@ -145,6 +147,7 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
           <div className="live-header-text">{goal || '…'}</div>
         </div>
         <div className="live-header-status">
+          {model && <span className="model-badge mono">{model}</span>}
           <StatusPill status={state.status} />
           <span className="step-counter mono">
             step {Math.max(0, ...state.steps.map((s) => s.step))}
