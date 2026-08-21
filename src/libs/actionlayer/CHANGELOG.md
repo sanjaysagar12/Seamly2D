@@ -8,6 +8,112 @@ See also [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the standal
 decision and [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md) for the
 full op reference.
 
+## Phase 12 — Undo/redo (`session.undo`, `session.redo`, `session.undoStatus`)
+
+- New ops: `session.undo` (`{"count"?}` -> `{"undone","canUndo","canRedo","index","count"}`),
+  `session.redo` (mirror), `session.undoStatus` (read-only: `canUndo`/`canRedo`/`index`/`count`
+  plus a bounded 5-before/5-after window of labeled steps). Both `session.undo`/`session.redo`
+  stop early without erroring once nothing is left to undo/redo — an empty stack is a clean
+  `{"undone": 0, ...}` success, not a failure.
+- **Grouping:** one JSON action now == one `QUndoStack` macro, regardless of how many
+  `VUndoCommand`s its handler pushes internally. `ActionSchema` gained a `mutatesPattern` bool,
+  derived automatically from each op's existing `category` (`action_registry.cpp`'s `buildSchema()`
+  — `"introspection"`/`"session"` are false, every other category is true), so none of the ~50
+  pre-existing `registerAction(...)` call sites needed touching. `ActionEngine::run()` gained two
+  optional `std::function` callbacks (`BeginMutatingActionFn`/`EndMutatingActionFn`), invoked
+  around a mutating op's dispatch and guaranteed paired by an RAII guard even if a handler throws;
+  defaulted to no-ops so every pre-existing direct `ActionEngine::run()` caller (every
+  `ActionLayerTest` fixture) keeps compiling and behaving identically. `PatternSession::
+  runActions()` is the one place that supplies real `qApp->getUndoStack()->beginMacro()`/
+  `endMacro()` lambdas — `ActionEngine` itself still has zero `qApp`/`QUndoStack` dependency,
+  preserving the separation `docs/ARCHITECTURE.md`'s ADR already committed to.
+- **Found, verified, and correctly worked around a real macro-imbalance quirk:**
+  `PatternPieceTool::ToolCreation()`/`InternalPathTool::ToolCreation()` (pre-existing GUI-shared
+  code) each call `qApp->getUndoStack()->endMacro()` unconditionally for `Source::FromGui` — the
+  mode `piece_handlers.cpp`'s raw-overload calls always use — with no matching `beginMacro()` of
+  their own on that path (only the *dialog*-based `Create()` overloads, which this action layer
+  never calls, open one). Before this phase that was a harmless `qWarning` no-op; this phase's own
+  outer `beginMacro()` now supplies the "matching" begin instead, which actually *fixes* the
+  warning as a side effect and still ends up wrapping the whole action's real mutation, since
+  nothing is pushed after `ToolCreation()` returns for either op. Documented in detail at
+  `pattern_session.cpp`'s own `runActions()` comment.
+- **Found and confirmed, by direct code reading, that `point.edit` is the one op in this action
+  layer that can push more than one `VUndoCommand` per JSON action** (an `endLine`-created point
+  given both `"length"` and `"angle"` in the same call pushes two separate `SaveToolOptions`
+  commands). Verified live: both are grouped into one macro, and one `session.undo` call reverts
+  both together. No other existing handler was found to open its own nested macro or push more
+  than one command per call.
+- **CRITICAL, VERIFIED FINDING (the headline result of this phase's investigation) — undoing an
+  object's *creation* does not prune the live `VContainer`.** `session.undo` genuinely, correctly
+  rewrites the pattern DOM (`AddToCalc::undo()` really does remove the tool's element, and a
+  `session.save` issued right after writes a correctly smaller `.val` file) — but there is no
+  object-deletion mechanism anywhere in this codebase yet (the same gap Phase 9 already documented
+  for explicit deletion, just newly visible here). Every already-alive tool's own
+  `FullUpdateFromFile()` override does re-run synchronously on undo/redo with no Qt event loop
+  needed (see below), but it only *refreshes* a surviving tool from its DOM element — a tool whose
+  element just vanished isn't deleted, `VDrawTool::ReadAttributes()` just logs "Can't find tool
+  with id" and returns, leaving the stale object exactly as it was. Reproduced directly via a real
+  `actiond` run: after undoing every action in a script, `pattern.dump`/`render.snapshot`/
+  `pattern.resolveName` all still report the "undone" objects, completely unchanged; creating a new
+  object under the same name then *succeeds* (no collision rejected); the next action that
+  references that name by name fails with a structured `{"kind":"duplicate",...}` nameResolution
+  error, because both the stale and the fresh object are now live and same-named. **By contrast,
+  undoing an in-place *edit* (`point.edit`) is not affected — it correctly restores live geometry
+  (x/y), not just the DOM formula string**, because the edited tool's own element is never removed,
+  only its attributes are rewritten back and successfully re-read. Full writeup, and the exact
+  reproduction, preserved at `src/libs/actionlayer/handlers/session_undo_handlers.h`'s own header
+  comment and as a golden-file regression case,
+  `tests/actionlayer/scripts/10_undo_redo.json`/`expected/10_undo_redo.expected.json`. Not fixed in
+  this phase (would require a real delete/prune step or a full `VPattern::Parse(Document::
+  FullParse)` re-run wired into the undo/redo path) — flagged as the primary follow-up.
+- **Resolved the open "how does `RedoFullParsing()`'s posted `LiteParseEvent` ever get processed
+  with no Qt event loop" question** (`actiond`'s `main()` never calls `QCoreApplication::exec()`,
+  in either mode): it doesn't, ever, and that's fine by design, not a latent bug — that branch only
+  ever runs on a command's *very first* execution (the original `push()`), at which point the
+  in-memory state was already built directly by the tool's own `Create()` factory moments earlier,
+  independent of the undo command; every later `redo()` and every `undo()` call instead takes the
+  synchronous `emit doc->FullUpdateFromFile()` branch, which runs a signal's connected slots inline
+  with no event loop involved at all. Documented at length in `pattern_session.cpp`'s own
+  `runActions()` comment, including the correction of an earlier (wrong) assumption during this
+  same investigation that this cascade also kept `VContainer` itself in sync (see the finding
+  above — it keeps *surviving* tools' geometry in sync; it does not delete anything).
+- Registered under category `"session"` (excluded from macro-wrapping, same as `session.save`/
+  `session.close` — wrapping the undo/redo mechanism in its own undo macro would be circular).
+  `pattern.listTools`'s hand-written mirror list and `docs/action-layer-schema.md` (51 ops total,
+  up from 48) both updated in the same change.
+- New `tests/actionlayer/scripts/10_undo_redo.json` + `expected/10_undo_redo.expected.json`,
+  generated from and verified byte-identical to a real `actiond` run against
+  `fixtures/patterns/blank.val` — covers the label window, the multi-command `point.edit` grouping,
+  `session.undo` with `"count"` larger than the remaining stack, and the creation-undo staleness
+  finding above, all in one script. Not yet run through `run_batch`'s own harness binary in this
+  environment: `ActionLayerBatchTests`/`run_batch` (see the "Test harness rebuild" entry below) is
+  wired into `src/test/test.pro`'s `SUBDIRS` but was never configured into this checkout's existing
+  qmake build tree (predates this phase) — a pre-existing gap, not introduced here.
+- **KNOWN GAP, not a regression:** `piece.union`'s raw `Create()` overload pushes no `VUndoCommand`
+  at all (`UnionTool` doesn't override `ToolCreation()`, so its base-class version calls
+  `AddToFile()` -> `AddToModeling()`, which appends straight to the live DOM with no undo wrapping)
+  — if the pre-existing segfault gap (`piece_handlers.h`) is ever fixed, `session.undo` would still
+  open/close a macro around it (its category is `"piece"`), but that macro would be empty and
+  undoing it would not revert the union. Documented alongside the existing segfault note.
+  `measurements.load`/`.recompute`/`.sync` similarly push no `VUndoCommand` (their mutations go
+  straight to `VContainer`/`doc->LiteParseTree()`, none of it undo-tracked) — `session.undo`
+  crossing a `measurements.sync` boundary consumes that step without reverting the measurement
+  values or size/height that were active before it; only the geometry actions immediately
+  before/after are actually affected. Documented at `measurements_sync_handlers.h`.
+- Verification method: built `actionlayer`/`actiond` for real (MSVC/Qt 6.5.3) and ran the scenarios
+  above against a live `actiond.exe`, rather than relying on code reading alone — this is what
+  surfaced the `VContainer`-staleness finding above, which a code-reading-only pass would have
+  missed (the relevant signal/slot wiring reads as correct; it just doesn't do what an initial
+  reading assumes). Building `actiond` in this environment required a separate, pre-existing,
+  unrelated fix: `src/libs/vdxf/vdxfpaintdevice.cpp` uses `QPaintDevice::PdmDevicePixelRatioF_
+  EncodedA`/`_EncodedB`/`encodeMetricF()`, a Qt 5.6–5.13-only transitional API removed in Qt 6
+  (superseded by `PdmDevicePixelRatioScaled`, already handled in the same `switch`) — `vdxf` (a
+  Phase 11 build dependency) had never actually been built against this checkout's Qt 6.5.3 before.
+  Patched locally only to unblock this phase's own verification, then reverted before finishing
+  (`git status` confirms `src/libs/vdxf/` carries no changes from this phase) — flagged here as a
+  real, separate, currently-unfixed blocker on building `actiond`/`ActionLayerTest` at all in this
+  environment, not something this phase's scope covers fixing.
+
 ## Phase 11 — Direct scene export (`export.scene`)
 
 - New op: `export.scene` — writes the current draft scene (Phase A: direct scene export, no

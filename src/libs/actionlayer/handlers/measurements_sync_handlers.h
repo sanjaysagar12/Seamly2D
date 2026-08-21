@@ -34,6 +34,26 @@ class ActionContext; // Forward declaration; only used by const reference in the
 // it, mirroring MainWindow::updateMeasurements()/syncMeasurements()/checkRequiredMeasurements()
 // (mainwindow.cpp) without a MainWindow dependency. Distinct from pattern.listMeasurements
 // (pattern_measurements_handler.cpp, Phase 1, read-only) -- these three actions mutate VContainer/doc.
+//
+// KNOWN GAP (documented, not silently shipped -- Phase 12 undo/redo investigation): none of the
+// three actions below push a QUndoCommand. Their mutations go straight to VContainer
+// (ClearVariables()+readMeasurements(), the static VContainer::setSize()/setHeight()) and to
+// doc->LiteParseTree() -- none of which is undo-tracked, unlike every Create()-based handler's
+// AddToCalc/SaveToolOptions push. Phase 12 still opens a QUndoStack macro around each of these
+// actions (ActionSchema::mutatesPattern is true for category "measurements", same as every other
+// mutating category -- see action_registry.cpp's buildSchema()), so "session.undo"/
+// "session.undoStatus" still count one of these as a real step and can label it -- but that step
+// is an EMPTY macro: calling "session.undo" to step back past a "measurements.sync" consumes the
+// step (the undo-stack index moves) without reverting the measurement values or the size/height
+// that were active before it. Only the geometry-creating actions immediately before/after a
+// measurement swap (each one its own, separately undoable AddToCalc-backed step) are actually
+// affected by undo/redo here; the measurement swap itself is not. Verified by direct code reading
+// of VContainer::ClearVariables()/readMeasurements()/setSize()/setHeight() and doc->
+// LiteParseTree() -- none constructs or pushes a QUndoCommand anywhere in this call chain.
+// Restoring pre-swap measurement state after an undo would require its own dedicated undo command
+// (e.g. snapshotting/restoring VContainer's measurement variables), which is out of scope for this
+// phase; flagged here as follow-up work rather than silently assumed to "just work" like the
+// Create()-based ops.
 
 // Implements "measurements.load": {"path","size"?,"height"?} -> {"success","measurementsLoaded",
 // "type"} or a structured failure. Loads and validates the named measurement file exactly as

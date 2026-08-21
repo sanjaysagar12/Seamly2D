@@ -40,6 +40,7 @@
 #include "handlers/piece_handlers.h"                  // Brings in the five Phase 8 piece.* handle*() functions below.
 #include "handlers/point_edit_handlers.h"              // Brings in handlePointEdit(), registered under "point.edit".
 #include "handlers/session_handlers.h"                 // Brings in handleSessionSave()/handleSessionClose(), registered under "session.save"/"session.close".
+#include "handlers/session_undo_handlers.h"             // Brings in the three Phase 12 handle*() functions below (session.undo, session.redo, session.undoStatus).
 
 #include <algorithm> // Provides std::sort, used by allSchemas() to return a deterministically ordered list.
 #include <utility>   // Provides std::move, used by the buildSchema() builder below.
@@ -77,6 +78,16 @@ namespace
         s.exampleRequest = exampleRequest;
         s.partial = partial;
         s.partialReason = partialReason;
+        // Phase 12: see ActionSchema::mutatesPattern's own comment (action_schema.h) for why this
+        // is derived from category here rather than passed explicitly at each of the ~50 call
+        // sites below. "introspection" (pattern.dump, render.snapshot, export.scene, ...) and
+        // "session" (session.save/close/undo/redo/undoStatus) are the only two categories whose
+        // ops must never open a QUndoStack macro; every other category currently registered
+        // (point, formula-point, curve, cut-point, operation, piece, measurements) does real
+        // pattern mutation. A future op registered under a *new* category name would default to
+        // true (safer default -- an unnecessary empty macro around a read-only op is harmless
+        // clutter; silently NOT wrapping a real mutation would hide it from session.undo entirely).
+        s.mutatesPattern = (category != QStringLiteral("introspection") && category != QStringLiteral("session"));
         return s;
     }
 }
@@ -850,6 +861,31 @@ void ActionRegistry::registerBuiltinActions()
         QStringLiteral("Ends the persistent NDJSON daemon's read loop after this batch's response is written. No effect in one-shot mode beyond succeeding as a normal action."),
         {},
         QStringLiteral(R"({ "op": "session.close" })")));
+
+    // ---- Undo/redo (Phase 12) --------------------------------------------------------------------
+    registerAction(QStringLiteral("session.undo"), &handleSessionUndo, buildSchema(
+        QStringLiteral("session.undo"), QStringLiteral("session"),
+        QStringLiteral("Undoes the last \"count\" mutating actions (default 1), each one JSON action = one undo step regardless of how many underlying VUndoCommands its handler pushed. Stops early, without erroring, once nothing is left to undo -- undoing on an empty stack is a normal, successful zero-op result, not a failure."),
+        {
+            param(QStringLiteral("count"), QStringLiteral("number"), false,
+                QStringLiteral("Literal: how many steps to undo. Defaults to 1; 0 is a valid (pointless) no-op; negative is a hard error."), QStringLiteral("1")),
+        },
+        QStringLiteral(R"({ "op": "session.undo" })")));
+
+    registerAction(QStringLiteral("session.redo"), &handleSessionRedo, buildSchema(
+        QStringLiteral("session.redo"), QStringLiteral("session"),
+        QStringLiteral("Redoes the last \"count\" undone actions (default 1). Exact mirror of \"session.undo\" -- see its own description for the shared \"stop early, never error on running out\" contract. Standard QUndoStack behavior applies: pushing any new mutating action after an undo discards every redo entry that came after it."),
+        {
+            param(QStringLiteral("count"), QStringLiteral("number"), false,
+                QStringLiteral("Literal: how many steps to redo. Defaults to 1; 0 is a valid (pointless) no-op; negative is a hard error."), QStringLiteral("1")),
+        },
+        QStringLiteral(R"({ "op": "session.redo" })")));
+
+    registerAction(QStringLiteral("session.undoStatus"), &handleSessionUndoStatus, buildSchema(
+        QStringLiteral("session.undoStatus"), QStringLiteral("session"),
+        QStringLiteral("Read-only introspection over the undo stack: whether undo/redo are currently possible, the current position, the total step count, and a bounded window of labeled steps (5 before/5 after the current position) so a caller can see what it is about to undo/redo before actually calling either action."),
+        {},
+        QStringLiteral(R"({ "op": "session.undoStatus" })")));
 }
 
 // Stores the handler function and its descriptive schema in the internal maps under the given

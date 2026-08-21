@@ -26,6 +26,9 @@
 #define ACTION_ENGINE_H // Marks ACTION_ENGINE_H as defined for the remainder of the include guard.
 
 #include <QJsonDocument> // Provides QJsonDocument, both the script parameter's and run()'s return type.
+#include <QString>       // Provides QString, the label type passed to BeginMutatingActionFn.
+
+#include <functional> // Provides std::function, the callback types below.
 
 class ActionRegistry; // Forward declaration; only a reference to it is stored here.
 class ActionContext;  // Forward declaration; only a const reference to it is passed to run().
@@ -37,6 +40,19 @@ public:
     // Constructor stores a reference to the registry actions will be looked up in.
     explicit ActionEngine(ActionRegistry &registry); // Implemented in action_engine.cpp.
 
+    // Phase 12 (undo/redo): optional hooks run() calls immediately before/after dispatching a
+    // handler whose ActionSchema::mutatesPattern is true (see action_schema.h) -- never around a
+    // read-only or session-lifecycle op. Plain std::function, not a QUndoStack-specific type or
+    // signature, so ActionEngine itself stays free of any qApp/QUndoStack dependency; the one
+    // real caller that supplies non-empty callbacks (PatternSession::runActions(),
+    // pattern_session.cpp) is the only place that actually touches qApp->getUndoStack() --
+    // matching the same "keep ActionEngine decoupled" invariant this module has held since Phase
+    // 0 (see docs/ARCHITECTURE.md). beginMutatingAction receives a short diagnosable label (op
+    // name plus, where available, an identifying field's value, e.g. `basePoint("A")`); intended
+    // for `QUndoStack::beginMacro(label)`, surfaced later via "session.undoStatus"'s label window.
+    using BeginMutatingActionFn = std::function<void(const QString &label)>;
+    using EndMutatingActionFn = std::function<void()>;
+
     // Parses the top-level {"actions": [{"op": "...", ...}, ...]} script, dispatches each entry
     // through the registry, and returns {"results": [...]} with one entry per action, in order.
     // An unknown "op" produces a result entry with ok == false instead of crashing or skipping.
@@ -47,7 +63,14 @@ public:
     // the NDJSON session protocol's "onError":"abort" (see session_server.cpp); the default-false
     // "keep going" behavior remains what every one-shot actiond script and ActionLayerTest fixture
     // already relies on.
-    QJsonDocument run(const QJsonDocument &script, const ActionContext &ctx, bool abortOnFirstError = false); // Implemented in action_engine.cpp.
+    //
+    // beginMutatingAction/endMutatingAction default to empty (falsy) std::functions, so every
+    // pre-existing call site (every ActionLayerTest fixture, which calls engine.run(script, ctx)
+    // with no macro-grouping at all) keeps compiling and behaving identically -- no QUndoStack
+    // macro is opened unless a caller explicitly supplies both callbacks.
+    QJsonDocument run(const QJsonDocument &script, const ActionContext &ctx, bool abortOnFirstError = false,
+                       const BeginMutatingActionFn &beginMutatingAction = BeginMutatingActionFn(),
+                       const EndMutatingActionFn &endMutatingAction = EndMutatingActionFn()); // Implemented in action_engine.cpp.
 
 private:
     ActionRegistry &m_registry; // Reference to the registry supplied at construction; not owned by ActionEngine.
