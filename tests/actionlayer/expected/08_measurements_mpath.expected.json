@@ -1,0 +1,60 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "A1",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 2,
+                        "tool": "EndLine"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "0",
+                        "formulaLength": "shoulder_length",
+                        "id": 2,
+                        "name": "A1",
+                        "type": "Point",
+                        "x": 491.3385826771654,
+                        "y": 0
+                    }
+                ]
+            }
+        }
+    ]
+}

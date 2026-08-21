@@ -27,11 +27,13 @@
 #include "../seamly2d/xml/vpattern.h" // Brings in VPattern, the same VAbstractPattern subclass seamly2d itself uses to parse/create .val files.
 
 #include "../../libs/ifc/exception/vexception.h"     // Brings in VException, thrown for every load-time failure.
+#include "../../libs/ifc/xml/vabstractpattern.h"     // Brings in VAbstractPattern::SetMPath(), called below to keep a loaded measurement file's path in the saved pattern.
 #include "../../libs/ifc/xml/vpatternconverter.h"    // Brings in VPatternConverter, which upgrades older-format pattern files.
 #include "../../libs/vformat/measurements.h"         // Brings in MeasurementDoc, used to load and parse the measurement file.
 #include "../../libs/vpatterndb/vcontainer.h"        // Brings in VContainer, the data container the pattern and measurements populate.
 #include "../../libs/vwidgets/vmaingraphicsscene.h"  // Brings in VMainGraphicsScene, required (non-null) by VPattern::Parse()/CreateEmptyFile() callers.
 #include "../../libs/vwidgets/vmaingraphicsview.h"   // Brings in VMainGraphicsView; see the qApp->setSceneView() comment below for why one is needed.
+#include "../../libs/vmisc/def.h"                    // Brings in RelativeMPath()/AbsoluteMPath(), used the same way MainWindow::LoadPattern()/SavePattern() do.
 #include "../../libs/vmisc/vabstractapplication.h"   // Brings in the qApp accessors used to mirror MainWindow::LoadPattern()'s setup.
 
 #include <QFileInfo>      // Provides QFileInfo::exists(), used for the fast, clear existence check below.
@@ -53,14 +55,15 @@ namespace
 
     // Loads measurementsFilePath into data, exactly mirroring MainWindow::LoadPattern()'s own
     // measurement-loading setup (see action_host.cpp's pre-refactor comments for the full
-    // rationale of each call). A no-op when measurementsFilePath is empty -- the daemon's
-    // --measurements flag (and the one-shot CLI's, after this change) is optional.
-    void loadMeasurementsIfGiven(VContainer *data, const QString &measurementsFilePath)
+    // rationale of each call).
+    //
+    // Also records the path back onto doc's own <measurements> element (VAbstractPattern::SetMPath()),
+    // exactly as MainWindow::LoadIndividual()/LoadMultisize() do right after their own successful
+    // load (mainwindow.cpp) -- without this, a reopened .val file has no idea which measurement
+    // file it came from, so every measurement-referencing formula fails to resolve on reopen even
+    // though the in-process VContainer this call just populated looks entirely correct.
+    void loadMeasurementsFromPath(VContainer *data, VAbstractPattern *doc, const QString &measurementsFilePath)
     {
-        if (measurementsFilePath.isEmpty())
-        {
-            return;
-        }
         requireFileExists(measurementsFilePath, QStringLiteral("Measurements"));
 
         MeasurementDoc measurements(data);
@@ -69,6 +72,8 @@ namespace
         measurements.setXMLContent(measurementsFilePath);
         qApp->setPatternType(measurements.Type());
         measurements.readMeasurements();
+
+        doc->SetMPath(RelativeMPath(qApp->getFilePath(), measurementsFilePath));
     }
 }
 
@@ -112,27 +117,76 @@ PatternSession::PatternSession(const QString &patternFilePath, const QString &me
     qApp->setCurrentDocument(m_doc.data()); // Mirrors MainWindow's own setup; some formula/tool code reaches for qApp's "current" document.
     qApp->setCurrentData(m_data);           // Mirrors MainWindow's own setup; some formula/tool code reaches for qApp's "current" data container.
 
-    if (patternFilePath.isEmpty())
+    // RelativeMPath()/AbsoluteMPath() (vmisc/def.cpp) only make sense given absolute inputs -- a
+    // relative absoluteMPath is, by their own contract, returned unchanged instead of resolved
+    // against the current directory (see RelativeMPath()'s own early-return), because the GUI's own
+    // callers only ever pass paths a file-open dialog already made absolute. actiond's --pattern/
+    // --measurements are ordinary CLI arguments a caller may reasonably give as relative (see this
+    // example in examples/actionlayer/shirt_front_piece/README.md), so both are absolutized here,
+    // once, before anything below reads them -- matching what run_batch.exe (tests/actionlayer/)
+    // already has to do for the same reason when it invokes actiond as a subprocess.
+    const QString absolutePatternFilePath = patternFilePath.isEmpty() ? QString() : QFileInfo(patternFilePath).absoluteFilePath();
+    const QString absoluteMeasurementsFilePath = measurementsFilePath.isEmpty() ? QString() : QFileInfo(measurementsFilePath).absoluteFilePath();
+
+    if (absolutePatternFilePath.isEmpty())
     {
         // No pattern file given: build the minimal "new pattern" DOM directly, matching what
         // MainWindow::New()'s dialog-driven path ultimately relies on -- no draft blocks yet; the
         // first "basePoint" action's own doc->appendDraftBlock() call creates the first one.
+        // qApp->getFilePath() is left empty here (its default, unset value) -- there is no pattern
+        // save path yet for a measurement path to be relative to, so loadMeasurementsIfGiven()'s
+        // own RelativeMPath() call falls back to storing an absolute path, exactly as it does for
+        // any other empty patternPath; save() re-relativizes it the first time this pattern is
+        // actually saved somewhere, same as MainWindow::SavePattern() does for a never-saved file.
         m_doc->CreateEmptyFile();
-        loadMeasurementsIfGiven(m_data, measurementsFilePath);
+        if (!absoluteMeasurementsFilePath.isEmpty())
+        {
+            loadMeasurementsFromPath(m_data, m_doc.data(), absoluteMeasurementsFilePath);
+        }
     }
     else
     {
-        requireFileExists(patternFilePath, QStringLiteral("Pattern"));
+        requireFileExists(absolutePatternFilePath, QStringLiteral("Pattern"));
 
         // VPatternConverter upgrades an older-format .val file to the schema version
         // VPattern::Parse() expects, exactly as MainWindow::LoadPattern() does.
-        VPatternConverter converter(patternFilePath);
+        VPatternConverter converter(absolutePatternFilePath);
         m_doc->setXMLContent(converter.Convert());     // Loads the (possibly just-upgraded) pattern XML into doc's DOM tree.
         qApp->setPatternUnit(m_doc->measurementUnits()); // Sync qApp's unit to the pattern file's own declared unit, as MainWindow::LoadPattern() does.
 
+        // MainWindow::LoadPattern() only reaches its own equivalent call (setCurrentFile(), which
+        // calls qApp->setFilePath()) once the whole load has succeeded, several steps below this
+        // point in its own code -- but the MPath resolution right below needs qApp->getFilePath()
+        // to already be this pattern's own path *now*, so its RelativeMPath()/AbsoluteMPath() calls
+        // resolve against the right file. Nothing before this line reads qApp->getFilePath(), so
+        // setting it here instead of at the very end is equivalent for every already-successful-load
+        // side effect and additionally makes this one work.
+        qApp->setFilePath(absolutePatternFilePath);
+
+        // An explicit measurementsFilePath (the CLI's --measurements flag) overrides whatever
+        // measurement file the pattern's own <measurements> element already names, exactly as
+        // MainWindow::LoadPattern()'s own customMeasureFile parameter does (mainwindow.cpp):
+        // SetMPath() here updates the DOM in place, so the AbsoluteMPath() resolution right below
+        // picks up the override the same way it would pick up the pattern's own stored path.
+        if (!absoluteMeasurementsFilePath.isEmpty())
+        {
+            requireFileExists(absoluteMeasurementsFilePath, QStringLiteral("Measurements"));
+            m_doc->SetMPath(RelativeMPath(absolutePatternFilePath, absoluteMeasurementsFilePath));
+        }
+
         // Measurements must be loaded before Parse() below: pattern formulas can reference
         // measurement variables, which have to already exist in data by the time they're evaluated.
-        loadMeasurementsIfGiven(m_data, measurementsFilePath);
+        // Resolves against doc's own <measurements> element -- either just overridden above, or
+        // whatever the pattern file itself already stored -- exactly as MainWindow::LoadPattern()'s
+        // own `AbsoluteMPath(fileName, doc->MPath())` + loadMeasurements() call does. This is what
+        // lets a pattern saved with a populated <measurements> path (see save()) be reopened with no
+        // --measurements flag at all and still resolve its measurement-referencing formulas -- the
+        // exact scenario the real Seamly2D GUI already handles this way.
+        const QString effectiveMeasurementsPath = AbsoluteMPath(absolutePatternFilePath, m_doc->MPath());
+        if (!effectiveMeasurementsPath.isEmpty())
+        {
+            loadMeasurementsFromPath(m_data, m_doc.data(), effectiveMeasurementsPath);
+        }
 
         // The real, full parse: walks the pattern XML and builds every geometry object and the
         // tool history into data/doc, via the same vtools Create() factories the GUI editor uses.
@@ -171,7 +225,33 @@ QJsonDocument PatternSession::runActions(const QJsonDocument &script, bool abort
 
 bool PatternSession::save(const QString &path, QString &error)
 {
-    return m_doc->SaveDocument(path, error);
+    // Absolutized for the same reason the constructor absolutizes --pattern/--measurements: a
+    // caller (action_host.cpp's --save-pattern flag) may reasonably pass a relative path, but
+    // RelativeMPath()/AbsoluteMPath() below only produce a correct result given an absolute one.
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+
+    // Mirrors MainWindow::SavePattern() (mainwindow.cpp): doc->MPath() was stored relative to
+    // whatever qApp->getFilePath() was at load/measurements-load time, which is not necessarily
+    // this save's own destination (e.g. action_host.cpp's --save-pattern, or a script's
+    // session.save action, routinely save to a different path than --pattern named). Re-anchor it
+    // to absolutePath here so the saved XML's <measurements> element resolves correctly no matter
+    // where the file ends up, exactly as the real GUI does on every save.
+    const QString mPath = AbsoluteMPath(qApp->getFilePath(), m_doc->MPath());
+    if (!mPath.isEmpty() && qApp->getFilePath() != absolutePath)
+    {
+        m_doc->SetMPath(RelativeMPath(absolutePath, mPath));
+    }
+
+    const bool result = m_doc->SaveDocument(absolutePath, error);
+    if (result)
+    {
+        qApp->setFilePath(absolutePath); // Mirrors MainWindow::SavePattern()'s own setCurrentFile(fileName) call, so a later save/measurements load computes correctly against it too.
+    }
+    else if (!mPath.isEmpty())
+    {
+        m_doc->SetMPath(mPath); // Save failed: restore the pre-recompute path, exactly as SavePattern()'s own failure branch does.
+    }
+    return result;
 }
 
 const ActionContext &PatternSession::context() const

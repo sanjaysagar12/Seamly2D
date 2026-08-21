@@ -1,0 +1,8 @@
+{
+    "_description": "Regression test for the missing-<measurements>-path bug (fixed 21 Aug 2026): loads the default fixture measurements (fixtures/measurements/sample.smis, via --measurements), creates one point using a measurement-referencing formula ('shoulder_length'), and dumps it. run_batch's own bespoke checkMeasurementsPathRegression() (main.cpp) does the real assertions this case exists for: that the saved pattern.val this case produces (via --save-pattern, same as every other case) has a non-empty <measurements> element resolving back to sample.smis, and that reloading that saved file with NO --measurements flag still resolves 'shoulder_length' to the same coordinate as this run -- proving VAbstractPattern::SetMPath() is actually being called after a measurement load, not just that the in-process VContainer looks right.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "A1", "basePoint": "A", "length": "shoulder_length", "angle": "0" },
+        { "op": "pattern.dump" }
+    ]
+}

@@ -5,7 +5,7 @@
     <unit>mm</unit>
     <description/>
     <notes/>
-    <measurements/>
+    <measurements>measurements.smis</measurements>
     <variables/>
     <!--The current pattern schema requires draftBlock+ (at least one draft block), even in an
     otherwise empty file. VPattern::CreateEmptyFile() builds a truly zero draftBlock DOM in

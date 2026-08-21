@@ -27,6 +27,8 @@
 #include "../action_context.h" // Brings in ActionContext, supplying the document this handler saves.
 
 #include "../../ifc/xml/vabstractpattern.h" // Brings in VAbstractPattern (a VDomDocument subclass): SaveDocument() is declared on the latter, callable straight through the former's pointer.
+#include "../../vmisc/def.h"                 // Brings in RelativeMPath()/AbsoluteMPath(), used the same way MainWindow::SavePattern() does to re-anchor doc->MPath() to this save's destination.
+#include "../../vmisc/vabstractapplication.h" // Brings in the qApp accessors (getFilePath()/setFilePath()) SavePattern()'s own MPath handling reads/writes.
 
 #include <QDir>        // Provides QDir::mkpath(), used to create the output path's parent directory, matching render_handlers.cpp's own convention.
 #include <QFileInfo>   // Provides QFileInfo, used both to create the parent directory and to report the resolved absolute path.
@@ -53,14 +55,33 @@ ActionResult handleSessionSave(const QJsonObject &args, const ActionContext &ctx
         return ActionResult::failure(QStringLiteral("could not create output directory: %1").arg(pathInfo.absolutePath()));
     }
 
-    QString error; // SaveDocument() reports failure via this out-parameter, not an exception.
-    if (!doc->SaveDocument(pathInfo.absoluteFilePath(), error))
+    const QString absolutePath = pathInfo.absoluteFilePath();
+
+    // Mirrors MainWindow::SavePattern() (mainwindow.cpp): doc->MPath() was stored relative to
+    // whatever qApp->getFilePath() was at load/measurements-load time -- not necessarily this
+    // action's own destination (this pattern may have been loaded from one path and session.save'd
+    // to a completely different one). Re-anchor it to absolutePath here so the saved XML's
+    // <measurements> element resolves correctly no matter where the file ends up, exactly as the
+    // real GUI does on every save.
+    const QString mPath = AbsoluteMPath(qApp->getFilePath(), doc->MPath());
+    if (!mPath.isEmpty() && qApp->getFilePath() != absolutePath)
     {
-        return ActionResult::failure(QStringLiteral("failed to save pattern to %1: %2").arg(pathInfo.absoluteFilePath(), error));
+        doc->SetMPath(RelativeMPath(absolutePath, mPath));
     }
 
+    QString error; // SaveDocument() reports failure via this out-parameter, not an exception.
+    if (!doc->SaveDocument(absolutePath, error))
+    {
+        if (!mPath.isEmpty())
+        {
+            doc->SetMPath(mPath); // Save failed: restore the pre-recompute path, exactly as SavePattern()'s own failure branch does.
+        }
+        return ActionResult::failure(QStringLiteral("failed to save pattern to %1: %2").arg(absolutePath, error));
+    }
+    qApp->setFilePath(absolutePath); // Mirrors MainWindow::SavePattern()'s own setCurrentFile(fileName) call, so a later save/measurements load computes correctly against it too.
+
     QJsonObject payload;
-    payload["path"] = pathInfo.absoluteFilePath();
+    payload["path"] = absolutePath;
     return ActionResult::success(payload);
 }
 

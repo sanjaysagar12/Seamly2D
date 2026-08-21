@@ -48,6 +48,7 @@
 #include <QJsonArray>
 #include <QJsonValue>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStringList>
 #include <QTextStream>
 #include <QDebug>
@@ -468,6 +469,156 @@ namespace
         out << QStringLiteral("[list_tools_ai] PASS (%1 tools)\n").arg(tools.size());
         return true;
     }
+
+    // Finds the "A1" point object inside a pattern.dump result's own {"results":[...]} response,
+    // or an empty QJsonObject if no pattern.dump result (or no such point) is present. Shared by
+    // both halves of checkMeasurementsPathRegression() below.
+    QJsonObject findDumpedPoint(const QJsonDocument &response, const QString &pointName)
+    {
+        const QJsonArray results = response.object().value(QStringLiteral("results")).toArray();
+        for (const QJsonValue &resultValue : results)
+        {
+            const QJsonObject result = resultValue.toObject();
+            if (result.value(QStringLiteral("op")).toString() != QStringLiteral("pattern.dump"))
+            {
+                continue;
+            }
+            const QJsonArray objects = result.value(QStringLiteral("value")).toObject().value(QStringLiteral("objects")).toArray();
+            for (const QJsonValue &objectValue : objects)
+            {
+                if (objectValue.toObject().value(QStringLiteral("name")).toString() == pointName)
+                {
+                    return objectValue.toObject();
+                }
+            }
+        }
+        return QJsonObject();
+    }
+
+    // Regression check for the "missing <measurements> path" bug (fixed 21 Aug 2026 -- see
+    // VAbstractPattern::SetMPath() calls added to src/app/actiond/pattern_session.cpp and
+    // src/libs/actionlayer/handlers/measurements_sync_handlers.cpp/session_handlers.cpp): a
+    // measurement-referencing formula resolved fine in-process, but the saved .val's own
+    // <measurements> element was left empty, so reopening the file (in the real Seamly2D GUI, or
+    // via actiond with no --measurements flag) left every such formula unresolved.
+    //
+    // scripts/08_measurements_mpath.json's own JSON response is already covered by the normal
+    // per-case diff in main() below; this bespoke check goes further, the same way checkListToolsAi()
+    // above exercises a CLI surface no scripts/*.json case can: it inspects the *saved pattern.val's
+    // XML itself* (never done by the JSON-only diff), then genuinely reloads that saved file into a
+    // fresh actiond process with NO --measurements flag at all, and confirms the same
+    // measurement-referencing formula still resolves to the identical coordinate -- the actual
+    // regression scenario a real GUI reopen hits, which a same-process/same-VContainer check could
+    // never catch even if the saved XML string happened to look right.
+    bool checkMeasurementsPathRegression(const QString &actiondExe)
+    {
+        const QString caseName = QStringLiteral("08_measurements_mpath");
+        const QString actionsPath = scriptsDir() + QLatin1Char('/') + caseName + QStringLiteral(".json");
+        const QString caseOutputDir = outputDir() + QLatin1Char('/') + caseName;
+
+        // Run the case fresh (independent of whether the main scripts/*.json loop already ran it)
+        // so this check's own saved pattern.val and expected coordinate are always in sync.
+        const RunResult firstRun = runOneCase(actiondExe, defaultPattern(), defaultMeasurements(), actionsPath, caseOutputDir);
+        if (!firstRun.ranAtAll || firstRun.exitCode != 0)
+        {
+            err << QStringLiteral("[measurements_mpath_regression] ERROR: could not run %1 -- see %2/stderr.log\n").arg(caseName, caseOutputDir);
+            return false;
+        }
+
+        // The known-good coordinate, computed with --measurements given -- read back out of the
+        // response this run just produced, instead of a magic number hardcoded here.
+        const QJsonObject originalA1 = findDumpedPoint(firstRun.response, QStringLiteral("A1"));
+        if (originalA1.isEmpty())
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: could not find point \"A1\" in %1's own pattern.dump response\n").arg(caseName);
+            return false;
+        }
+
+        // Assertion 1: the saved pattern.val's own <measurements> element must be non-empty and
+        // must resolve (relative to the saved file's own directory, exactly as VAbstractPattern::
+        // MPath()'s real GUI/actiond consumers do) to the actual fixture measurements file this
+        // case was loaded with -- not just "some string".
+        const QString savedPatternPath = caseOutputDir + QStringLiteral("/pattern.val");
+        QFile savedPatternFile(savedPatternPath);
+        if (!savedPatternFile.open(QIODevice::ReadOnly | QIODevice::Text))
+        {
+            err << QStringLiteral("[measurements_mpath_regression] ERROR: could not open saved pattern at %1\n").arg(savedPatternPath);
+            return false;
+        }
+        const QString savedPatternXml = QString::fromUtf8(savedPatternFile.readAll());
+        savedPatternFile.close();
+
+        static const QRegularExpression mpathPattern(QStringLiteral("<measurements>([^<]*)</measurements>"));
+        const QRegularExpressionMatch mpathMatch = mpathPattern.match(savedPatternXml);
+        if (!mpathMatch.hasMatch() || mpathMatch.captured(1).trimmed().isEmpty())
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: saved pattern's <measurements> element is empty or "
+                                   "missing (this is the exact bug fixed 21 Aug 2026)\n");
+            return false;
+        }
+        const QString storedMPath = mpathMatch.captured(1);
+        const QString resolvedMPath = QFileInfo(storedMPath).isAbsolute()
+            ? storedMPath
+            : QFileInfo(QFileInfo(savedPatternPath).absoluteDir(), storedMPath).absoluteFilePath();
+        if (QFileInfo(resolvedMPath).canonicalFilePath() != QFileInfo(defaultMeasurements()).canonicalFilePath())
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: saved <measurements> path (%1 -> %2) does not "
+                                   "resolve to the fixture measurements file (%3)\n").arg(storedMPath, resolvedMPath, defaultMeasurements());
+            return false;
+        }
+
+        // Assertion 2 (the real regression case): reload the SAVED file into a fresh actiond
+        // process with NO --measurements flag at all -- relying purely on the <measurements> path
+        // just verified above -- and confirm the same measurement-referencing formula
+        // ("shoulder_length") still resolves to the identical coordinate.
+        const QString reloadOutputDir = outputDir() + QLatin1Char('/') + caseName + QStringLiteral("_reload");
+        QDir().mkpath(reloadOutputDir);
+        const QString reloadActionsPath = reloadOutputDir + QStringLiteral("/reload_actions.json");
+        QJsonObject dumpAction;
+        dumpAction[QStringLiteral("op")] = QStringLiteral("pattern.dump");
+        QJsonObject reloadScript;
+        reloadScript[QStringLiteral("actions")] = QJsonArray{dumpAction};
+        if (!writeFile(reloadActionsPath, QJsonDocument(reloadScript).toJson()))
+        {
+            err << QStringLiteral("[measurements_mpath_regression] ERROR: could not write %1\n").arg(reloadActionsPath);
+            return false;
+        }
+
+        // Empty measurements argument: runOneCase()'s own "measurements.isEmpty()" check (see its
+        // body above) omits --measurements from actiond's command line entirely when given one.
+        const RunResult reloadRun = runOneCase(actiondExe, savedPatternPath, QString(), reloadActionsPath, reloadOutputDir);
+        if (!reloadRun.ranAtAll || reloadRun.exitCode != 0)
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: reloading the saved pattern with no --measurements "
+                                   "flag failed to run cleanly -- see %1/stderr.log (this is the exact scenario a real GUI "
+                                   "reopen hits)\n").arg(reloadOutputDir);
+            return false;
+        }
+
+        const QJsonObject reloadedA1 = findDumpedPoint(reloadRun.response, QStringLiteral("A1"));
+        if (reloadedA1.isEmpty())
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: reloaded pattern.dump did not include point \"A1\" "
+                                   "at all (the endLine formula referencing \"shoulder_length\" likely failed to resolve)\n");
+            return false;
+        }
+        if (reloadedA1.value(QStringLiteral("x")) != originalA1.value(QStringLiteral("x"))
+            || reloadedA1.value(QStringLiteral("y")) != originalA1.value(QStringLiteral("y")))
+        {
+            err << QStringLiteral("[measurements_mpath_regression] FAIL: reloaded \"A1\" coordinate (%1,%2) does not match "
+                                   "the original run's (%3,%4) -- the measurement-referencing formula resolved differently "
+                                   "once reopened via only the saved <measurements> path\n")
+                       .arg(QString::number(reloadedA1.value(QStringLiteral("x")).toDouble()),
+                            QString::number(reloadedA1.value(QStringLiteral("y")).toDouble()),
+                            QString::number(originalA1.value(QStringLiteral("x")).toDouble()),
+                            QString::number(originalA1.value(QStringLiteral("y")).toDouble()));
+            return false;
+        }
+
+        out << QStringLiteral("[measurements_mpath_regression] PASS (saved <measurements> resolves correctly; reload with "
+                               "no --measurements still resolves \"shoulder_length\" to x=%1)\n").arg(originalA1.value(QStringLiteral("x")).toDouble());
+        return true;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -517,8 +668,12 @@ int main(int argc, char *argv[])
             }
         }
 
-        const int totalChecks = scripts.size() + 1; // +1 for checkListToolsAi() below, an actiond-CLI check independent of any scripts/*.json case.
+        const int totalChecks = scripts.size() + 2; // +1 for checkListToolsAi(), +1 for checkMeasurementsPathRegression() below -- both actiond-CLI checks independent of any single scripts/*.json case's own JSON diff.
         if (checkListToolsAi(actiondExe))
+        {
+            ++passed;
+        }
+        if (checkMeasurementsPathRegression(actiondExe))
         {
             ++passed;
         }

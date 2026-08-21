@@ -35,8 +35,8 @@
 #include "../../ifc/xml/vabstractpattern.h"        // Brings in VAbstractPattern: the Document enum, ListMeasurements(), LiteParseTree().
 #include "../../ifc/exception/vexception.h"        // Brings in VException, thrown by setXMLContent()/readMeasurements()/the converters on a malformed file.
 #include "../../qmuparser/qmuparsererror.h"        // Brings in qmu::QmuParserError; see recomputePattern()'s comment for why this handler -- uniquely among the three -- must catch it.
-#include "../../vmisc/vabstractapplication.h"      // Brings in the qApp macro: patternType(), used for the type-consistency guard below.
-#include "../../vmisc/def.h"                       // Brings in MeasurementsType, VarType, and Unit, classified/compared throughout this file.
+#include "../../vmisc/vabstractapplication.h"      // Brings in the qApp macro: patternType(), used for the type-consistency guard below, and getFilePath(), used by the SetMPath() call below.
+#include "../../vmisc/def.h"                       // Brings in MeasurementsType, VarType, and Unit, classified/compared throughout this file, plus RelativeMPath(), used by the SetMPath() call below.
 
 #include <QFileInfo>      // Provides QFileInfo::exists(), the same fast existence check action_host.cpp's requireFileExists() uses.
 #include <QHash>          // Provides QHash, the type DataVariables() returns a pointer to.
@@ -101,12 +101,18 @@ namespace
     {
         LoadOutcome outcome; // Default-constructed: ok == false until every check below passes.
 
-        const QString path = args.value(QStringLiteral("path")).toString(); // The measurement file to load; required, no sane default.
-        if (path.isEmpty())
+        const QString rawPath = args.value(QStringLiteral("path")).toString(); // The measurement file to load; required, no sane default.
+        if (rawPath.isEmpty())
         {
             outcome.error = QStringLiteral("measurements.load requires a non-empty \"path\"");
             return outcome;
         }
+        // Absolutized so the SetMPath() call below stores a path RelativeMPath()/AbsoluteMPath()
+        // (vmisc/def.cpp) can correctly resolve later -- both only produce a correct result given an
+        // absolute input; a relative one is returned unchanged instead of resolved against the
+        // current directory (see RelativeMPath()'s own early-return), since the GUI's own equivalent
+        // callers only ever pass paths a file-open dialog already made absolute.
+        const QString path = QFileInfo(rawPath).absoluteFilePath();
         if (!QFileInfo::exists(path)) // Fail fast with a clear message, exactly as action_host.cpp's requireFileExists() does for the initial load.
         {
             outcome.error = QStringLiteral("measurements.load: file not found: %1").arg(path);
@@ -239,6 +245,14 @@ namespace
             outcome.error = QStringLiteral("measurements.load: error reading measurements from %1: %2").arg(path, error.ErrorMessage());
             return outcome;
         }
+
+        // Records path back onto doc's own <measurements> element (VAbstractPattern::SetMPath()),
+        // exactly as MainWindow::LoadIndividual()/LoadMultisize() do right after their own
+        // successful load (mainwindow.cpp) -- without this, a pattern saved after a
+        // measurements.load/measurements.sync action has no idea which measurement file it came
+        // from, so every measurement-referencing formula fails to resolve when the saved file is
+        // reopened, even though `data` (just repopulated above) looks entirely correct in-process.
+        doc->SetMPath(RelativeMPath(qApp->getFilePath(), path));
 
         if (measurements.Type() == MeasurementsType::Multisize)
         {
