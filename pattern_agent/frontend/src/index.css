@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #0f1416;
+  --bg-raised: #161d20;
+  --bg-panel: #131a1c;
+  --grid-line: rgba(216, 232, 224, 0.045);
+  --ink: #e7efe9;
+  --ink-dim: #9fb0aa;
+  --ink-faint: #64766f;
+  --accent: #ff9d3d;
+  --accent-soft: rgba(255, 157, 61, 0.14);
+  --accent-ink: #1a1206;
+  --line: #2a3438;
+  --line-soft: #1d2528;
+  --ok: #6fcf97;
+  --ok-soft: rgba(111, 207, 151, 0.14);
+  --err: #f2765a;
+  --err-soft: rgba(242, 118, 90, 0.14);
+  --warn: #f2c14e;
+
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+code,
+pre,
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
