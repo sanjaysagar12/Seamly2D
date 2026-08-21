@@ -1,0 +1,96 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 3,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "export.scene",
+            "value": {
+                "boundingBox": {
+                    "height": 96.74157265386066,
+                    "width": 443.6943285593725,
+                    "x": -27.741572653860658,
+                    "y": -27.741572653860654
+                },
+                "deviceSize": {
+                    "height": 97,
+                    "width": 444
+                },
+                "format": "svg",
+                "op": "export.scene",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/09_export_formats/drawing.svg",
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "export.scene",
+            "value": {
+                "boundingBox": {
+                    "height": 97.31496062992126,
+                    "width": 444.26771653543307,
+                    "x": -28.31496062992126,
+                    "y": -28.31496062992126
+                },
+                "deviceSize": {
+                    "height": 97,
+                    "width": 444
+                },
+                "format": "pdf",
+                "op": "export.scene",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/09_export_formats/drawing.pdf",
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "export.scene",
+            "value": {
+                "boundingBox": {
+                    "height": 97.31496062992126,
+                    "width": 444.26771653543307,
+                    "x": -28.31496062992126,
+                    "y": -28.31496062992126
+                },
+                "deviceSize": {
+                    "height": 97,
+                    "width": 444
+                },
+                "format": "dxf-2013",
+                "op": "export.scene",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/09_export_formats/drawing.dxf",
+                "status": "ok"
+            }
+        }
+    ]
+}

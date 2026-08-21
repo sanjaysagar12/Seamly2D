@@ -8,7 +8,7 @@
 message("Entering actionlayer.pro")
 include(../../../common.pri)
 
-QT += core widgets printsupport xml
+QT += core widgets printsupport xml svg # svg added for export_handlers.cpp's QSvgGenerator-based "export.scene" SVG writer.
 
 # Name of the library
 TARGET = actionlayer

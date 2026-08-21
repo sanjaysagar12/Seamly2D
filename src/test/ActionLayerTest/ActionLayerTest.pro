@@ -9,7 +9,7 @@
 # monolithic Seamly2DTests binary, since that binary's registration point
 # (qttestmainlambda.cpp) is outside actionlayer's phase-1 change scope.
 
-QT       += core testlib gui widgets printsupport xml multimedia
+QT       += core testlib gui widgets printsupport xml multimedia svg # svg added for tst_export_scene.cpp's coverage of export.scene's SVG format (and export_handlers.cpp's QSvgGenerator use, linked in via -lactionlayer).
 
 TARGET = ActionLayerTest
 
@@ -41,6 +41,7 @@ SOURCES += \
     main.cpp \
     tst_pattern_dump.cpp \
     tst_render_snapshot.cpp \
+    tst_export_scene.cpp \
     tst_name_resolver.cpp \
     tst_action_engine_batches.cpp \
     tst_action_schema.cpp
@@ -52,6 +53,7 @@ HEADERS += \
     test_pattern_doc.h \
     tst_pattern_dump.h \
     tst_render_snapshot.h \
+    tst_export_scene.h \
     tst_name_resolver.h \
     tst_action_engine_batches.h \
     tst_action_schema.h
@@ -162,6 +164,15 @@ DEPENDPATH += $$PWD/../../libs/vlayout
 
 win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vlayout/$${DESTDIR}/vlayout.lib
 else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vlayout/$${DESTDIR}/libvlayout.a
+
+# VDxf static library -- provides VDxfPaintDevice, exercised by tst_export_scene.cpp via export.scene's flat-DXF formats.
+unix|win32: LIBS += -L$$OUT_PWD/../../libs/vdxf/$${DESTDIR} -lvdxf
+
+INCLUDEPATH += $$PWD/../../libs/vdxf
+DEPENDPATH += $$PWD/../../libs/vdxf
+
+win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vdxf/$${DESTDIR}/vdxf.lib
+else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vdxf/$${DESTDIR}/libvdxf.a
 
 # QMuParser library
 unix|win32: LIBS += -L$${OUT_PWD}/../../libs/qmuparser/$${DESTDIR} -lqmuparser

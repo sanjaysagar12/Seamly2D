@@ -2,9 +2,9 @@
 
 This example builds a simple front shirt/bodice piece using only ops documented in
 [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md), runs it for real through
-`seamly2d-actiond`, and commits the resulting rendered PNG and `.val` pattern file. It is a
-**demonstration/validation deliverable for the action layer's pipeline**, not a golden test — it
-lives outside `tests/actionlayer/` and is not wired into `make check`.
+`seamly2d-actiond`, and commits the resulting rendered PNG, flat DXF, and `.val` pattern file. It
+is a **demonstration/validation deliverable for the action layer's pipeline**, not a golden test —
+it lives outside `tests/actionlayer/` and is not wired into `make check`.
 
 ## What it builds
 
@@ -91,7 +91,7 @@ out\src\app\actiond\bin\actiond.exe --pattern tests\actionlayer\fixtures\pattern
 
 This is one-shot mode: it loads the empty `blank.val` fixture, runs every action in
 `action.json`, prints the JSON result to stdout, and exits. The script's own
-`render.snapshot`/`session.save` actions carry explicit relative paths
+`render.snapshot`/`export.scene`/`session.save` actions carry explicit relative paths
 (`examples/actionlayer/shirt_front_piece/...`), so run the command from the repo root as shown —
 one-shot mode resolves those paths against the process's current working directory, not the
 actions file's location.
@@ -116,6 +116,14 @@ already-matching file.
   (`A`, `A1`, `A2`, ...) is visible in the image — useful for a demo/reference render like this one,
   where matching a rendered point back to the action script that created it matters. See
   `docs/action-layer-schema.md`'s `render.snapshot` entry for the full parameter.
+- [`shirt_front_piece.dxf`](shirt_front_piece.dxf) — flat (non-AAMA) DXF, AutoCAD 2013 format
+  (`"format": "dxf-2013"`), produced by the script's `export.scene` action — the same draft-scene
+  geometry as the PNG above, but as vector line/curve entities (curves flattened to short line
+  segments by the render pass, not native `SPLINE` entities — see `docs/export-actions-notes.md`
+  for why `export.scene`'s flat-DXF path renders the scene rather than walking piece geometry
+  directly) instead of pixels. Opens in any DXF-aware CAD tool. See
+  `docs/action-layer-schema.md`'s `export.scene` entry for the full parameter reference and the
+  complete list of formats this op supports (SVG, PDF, PS/EPS, raster, and nine DXF versions).
 - [`shirt_front_piece.val`](shirt_front_piece.val) — the saved pattern, Seamly2D's native XML
   format, produced by the script's final `session.save` action. Its formulas still reference the
   measurement names above, but `session.save` does not persist a link back to
@@ -125,7 +133,7 @@ already-matching file.
 - [`measurements.smis`](measurements.smis) — the body measurements the whole draft is derived
   from (see table above). SeamlyMe/Seamly2D individual-measurement XML format.
 
-Both generated files are committed as real output of an actual `actiond` run against
+All generated files are committed as real output of an actual `actiond` run against
 [`action.json`](action.json) — not hand-authored.
 
 ## Notes / caveats

@@ -8,6 +8,38 @@ See also [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the standal
 decision and [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md) for the
 full op reference.
 
+## Phase 11 — Direct scene export (`export.scene`)
+
+- New op: `export.scene` — writes the current draft scene (Phase A: direct scene export, no
+  piece nesting/cutting-layout arrangement) to any of eighteen formats: svg, pdf, ps, eps, the
+  five raster formats `render.snapshot` already supports (png/jpg/bmp/ppm/tif), and nine flat
+  DXF variants (`dxf-r10` through `dxf-2013`, covering every AutoCAD version R10 through 2013).
+- Extracted `render.snapshot`'s padding/aspect-ratio/pixel-size derivation out of
+  `render_handlers.cpp` into a new shared helper, `handlers/scene_render_geometry.h`/`.cpp`
+  (`computeSceneRenderGeometry()`), so `export.scene` reuses it verbatim instead of re-deriving
+  (or subtly diverging from) the same sizing rules; `render.snapshot`'s own behavior, including
+  its 4096px raster memory-safety cap, is unchanged.
+- **Architecture decision:** `export.scene` calls the same low-level, non-GUI writers
+  `MainWindowsNoGUI`'s own export functions do (`QSvgGenerator`, `QPrinter`, `VDxfPaintDevice`)
+  directly, rather than linking `actiond` against `MainWindow`/`MainWindowsNoGUI`/
+  `ExportLayoutDialog` — preserving both invariants `docs/ARCHITECTURE.md`'s ADR already commits
+  to (zero `MainWindow` coupling; an empty fork-diff on `mainwindow.cpp`/`mainwindow.h`). Full
+  reasoning, plus the Option A/B trade-off this resolves and why Phase B will need its own pass
+  at the same question, is recorded in the new `docs/export-actions-notes.md`.
+- New build dependency: `actiond`/`ActionLayerTest` now link `-lvdxf` (previously only
+  `seamly2d.pro` did) and declare `QT += svg` (previously deliberately excluded from `actiond.pro`
+  — see that file's own updated comment) for `VDxfPaintDevice` and `QSvgGenerator` respectively.
+- **Known gap, not a regression:** `ps`/`eps` export shells out to the external `pdftops` tool
+  (Poppler/Xpdf), exactly as `MainWindowsNoGUI::exportPS()`/`exportEPS()` already do — on a
+  machine without it on `PATH`, those two formats fail cleanly with a specific error rather than
+  producing output. Every other format (including every DXF variant) has no external-process
+  dependency.
+- New `src/test/ActionLayerTest/tst_export_scene.cpp` covering every format family, the
+  `.dxf`-with-no-explicit-`format` ambiguity guard, an unsupported-format error, an empty-scene
+  guard, and `binaryDXF: true` vs. `false` producing genuinely different output.
+- `docs/action-layer-schema.md` gained the `export.scene` entry and an updated coverage summary
+  (48 ops total).
+
 ## Follow-up: no request-envelope `"version"` field yet
 
 Every action JSON file/request line currently has no top-level `"version"` integer, so

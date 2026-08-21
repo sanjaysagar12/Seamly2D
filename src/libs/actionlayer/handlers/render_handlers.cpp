@@ -26,6 +26,7 @@
 
 #include "../action_context.h" // Brings in ActionContext, supplying the scene/doc/data this handler reads.
 #include "../name_resolver.h"  // Brings in NameResolver::idForName(), used to resolve "highlight" entries to ids.
+#include "scene_render_geometry.h" // Brings in computeSceneRenderGeometry(), the padding/sizing derivation this handler now shares with export_handlers.cpp instead of computing inline.
 
 #include "../../vwidgets/vmaingraphicsscene.h" // Brings in the full VMainGraphicsScene definition (a QGraphicsScene) so itemsBoundingRect()/render() are callable.
 #include "../../ifc/xml/vabstractpattern.h"    // Brings in VAbstractPattern::getTool(id), used to look up a highlighted object's live tool instance.
@@ -207,64 +208,18 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
         return ActionResult::failure(QStringLiteral("unrecognized 'background' value; expected 'transparent', 'white', or '#RRGGBB'")); // Explicit error instead of silently guessing a color.
     }
 
-    // --- padding / bounding box ----------------------------------------------------------------
-    const qreal padding = args.value(QStringLiteral("padding")).toDouble(20.0); // Margin added around the content on every side.
-
-    // items().isEmpty() (rather than itemsBoundingRect().isEmpty()) is the correct "truly nothing
-    // to render" check: a single perfectly horizontal or vertical line item has a bounding rect
-    // with zero width or height -- and QRectF::isEmpty() would then (wrongly) report the whole
-    // scene as empty even though it has real content to draw.
-    if (scene->items().isEmpty()) // No items at all: nothing meaningful can be rendered.
+    // --- padding / bounding box / pixel size ---------------------------------------------------
+    // Shared with export_handlers.cpp's handleExportScene(); see scene_render_geometry.h for the
+    // exact padding/aspect-ratio/raster-cap rules this applies (unchanged from before this was
+    // extracted -- applyRasterCap=true here preserves render.snapshot's original 4096px cap).
+    const SceneRenderGeometry geometry = computeSceneRenderGeometry(scene, args, /*applyRasterCap=*/true);
+    if (!geometry.ok) // Only false when the scene has no items at all.
     {
         return ActionResult::failure(QStringLiteral("empty scene, nothing to render")); // Structured error rather than producing a degenerate (0x0 or blank) image.
     }
-
-    const QRectF itemsRect = scene->itemsBoundingRect(); // Tight bounds of everything currently drawn, in scene coordinates.
-    // itemsBoundingRect() (not sceneRect()) is used deliberately: sceneRect() reflects the
-    // editor's configured/scrollable canvas size, which is usually much larger than the drawn
-    // content and would produce a mostly-blank image; itemsBoundingRect() crops to what's actually there.
-    const QRectF sourceRect = itemsRect.adjusted(-padding, -padding, padding, padding); // Expand by padding on all four sides.
-
-    // --- pixel size -----------------------------------------------------------------------------
-    const bool hasWidth = args.contains(QStringLiteral("width"));   // Caller supplied an explicit width.
-    const bool hasHeight = args.contains(QStringLiteral("height")); // Caller supplied an explicit height.
-
-    int pixelWidth = 0;  // Populated by exactly one of the three branches below.
-    int pixelHeight = 0; // Populated by exactly one of the three branches below.
-
-    if (hasWidth && hasHeight) // Both explicit: used verbatim, even if that distorts the aspect ratio -- that's documented as the caller's choice.
-    {
-        pixelWidth = args.value(QStringLiteral("width")).toInt();   // Caller's explicit pixel width.
-        pixelHeight = args.value(QStringLiteral("height")).toInt(); // Caller's explicit pixel height.
-    }
-    else if (hasWidth) // Only width given: derive height from the bounding box's aspect ratio.
-    {
-        pixelWidth = args.value(QStringLiteral("width")).toInt(); // Caller's explicit pixel width.
-        // qMax(..., 1.0) guards a degenerate (zero-width) sourceRect -- e.g. content built entirely
-        // from a single perfectly vertical line -- from producing a divide-by-zero/NaN aspect ratio.
-        const qreal aspect = sourceRect.height() / qMax(sourceRect.width(), 1.0);
-        pixelHeight = qMax(1, qRound(pixelWidth * aspect)); // At least 1px tall so QImage's constructor never receives a zero/negative size.
-    }
-    else if (hasHeight) // Only height given: derive width from the bounding box's aspect ratio.
-    {
-        pixelHeight = args.value(QStringLiteral("height")).toInt(); // Caller's explicit pixel height.
-        const qreal aspect = sourceRect.width() / qMax(sourceRect.height(), 1.0); // Same divide-by-zero guard as above, for a degenerate zero-height rect.
-        pixelWidth = qMax(1, qRound(pixelHeight * aspect)); // At least 1px wide, for the same reason as above.
-    }
-    else // Neither given: render at a 1:1 scene-unit-to-pixel mapping, then clamp.
-    {
-        pixelWidth = qMax(1, qRound(sourceRect.width()));   // 1:1 mapping: one scene unit becomes one pixel.
-        pixelHeight = qMax(1, qRound(sourceRect.height())); // 1:1 mapping: one scene unit becomes one pixel.
-
-        const int largerDimension = qMax(pixelWidth, pixelHeight); // Whichever axis is longer decides whether/how much to scale down.
-        const int maxDimension = 4096; // Memory-safety cap: at Format_ARGB32 (4 bytes/pixel), 4096x4096 is ~64MB; an unbounded 1:1 mapping against a huge/runaway draft could otherwise try to allocate a multi-gigabyte QImage and crash the process.
-        if (largerDimension > maxDimension) // Only scale down when the cap is actually exceeded.
-        {
-            const qreal scale = static_cast<qreal>(maxDimension) / static_cast<qreal>(largerDimension); // Uniform factor so the aspect ratio is preserved while scaling down.
-            pixelWidth = qMax(1, qRound(pixelWidth * scale));   // Scaled-down width, still at least 1px.
-            pixelHeight = qMax(1, qRound(pixelHeight * scale)); // Scaled-down height, still at least 1px.
-        }
-    }
+    const QRectF sourceRect = geometry.sourceRect;
+    const int pixelWidth = geometry.pixelWidth;
+    const int pixelHeight = geometry.pixelHeight;
 
     // --- resolve highlight names to scene-space rects (before rendering, since NameResolver/getTool don't depend on the render itself) ---
     QJsonArray highlightNamesArg = args.value(QStringLiteral("highlight")).toArray(); // Optional list of object names to mark; empty if absent.

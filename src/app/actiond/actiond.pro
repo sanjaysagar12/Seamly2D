@@ -15,9 +15,12 @@ include(../../../common.pri)
 # included practically everywhere in this dependency chain (confirmed empirically in Phase 1/2:
 # omitting it fails with "Cannot open include file: 'QPrinter'"). multimedia: required at link time --
 # vtools.lib's PatternPieceDialog uses QSoundEffect for a UI sound cue; actiond never shows that
-# dialog, but the static lib still needs the symbol resolved. network and svg are NOT included:
-# nothing actiond links against needs sockets, and svg icon rendering is GUI-only.
-QT += core gui widgets xml printsupport multimedia
+# dialog, but the static lib still needs the symbol resolved. network is NOT included: nothing
+# actiond links against needs sockets. svg WAS previously excluded here (icon rendering is
+# GUI-only, and nothing else pulled QSvgGenerator's symbols into this binary's link) --
+# export_handlers.cpp ("export.scene", added alongside render.snapshot) now uses QSvgGenerator
+# directly, so it is a real dependency here, not just a transitive one via -lvformat.
+QT += core gui widgets xml printsupport multimedia svg
 
 # Name of binary file
 TARGET = actiond
@@ -155,6 +158,15 @@ DEPENDPATH += $$PWD/../../libs/vlayout
 
 win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vlayout/$${DESTDIR}/vlayout.lib
 else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vlayout/$${DESTDIR}/libvlayout.a
+
+# VDxf static library -- provides VDxfPaintDevice, export_handlers.cpp's ("export.scene") flat-DXF writer.
+unix|win32: LIBS += -L$$OUT_PWD/../../libs/vdxf/$${DESTDIR}/ -lvdxf
+
+INCLUDEPATH += $$PWD/../../libs/vdxf
+DEPENDPATH += $$PWD/../../libs/vdxf
+
+win32:!win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vdxf/$${DESTDIR}/vdxf.lib
+else:unix|win32-g++: PRE_TARGETDEPS += $$OUT_PWD/../../libs/vdxf/$${DESTDIR}/libvdxf.a
 
 # QMuParser library
 unix|win32: LIBS += -L$${OUT_PWD}/../../libs/qmuparser/$${DESTDIR} -lqmuparser

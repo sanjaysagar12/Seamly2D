@@ -28,6 +28,7 @@
 #include "handlers/pattern_measurements_handler.h" // Brings in handleListMeasurements(), registered under "pattern.listMeasurements".
 #include "handlers/pattern_list_tools_handler.h"   // Brings in handleListTools(), registered under "pattern.listTools".
 #include "handlers/render_handlers.h"              // Brings in handleRenderSnapshot(), registered under "render.snapshot".
+#include "handlers/export_handlers.h"              // Brings in handleExportScene(), registered under "export.scene".
 #include "handlers/pattern_resolve_name_handler.h" // Brings in handlePatternResolveName(), registered under "pattern.resolveName".
 #include "handlers/point_handlers.h"                // Brings in handleBasePoint(), registered under "basePoint".
 #include "handlers/line_handlers.h"                 // Brings in handleLine(), registered under "line".
@@ -142,6 +143,34 @@ void ActionRegistry::registerBuiltinActions()
                 QStringLiteral("Literal flag: force point-name labels (e.g. \"A1\", \"A2\") on (true) or off (false) for this render, overriding the pattern's own scene-wide setting for the duration of this one call only. A point created with its own \"showPointName\": false (see basePoint/endLine/etc.) still never shows its label even when this is true -- this only controls the scene-wide toggle, not any individual point's own flag. Omit to leave the scene-wide setting exactly as the pattern/session already has it.")),
         },
         QStringLiteral(R"({ "op": "render.snapshot", "path": "square.png", "width": 400, "height": 400, "highlight": ["A", "B"], "showPointNames": true })")));
+
+    registerAction(QStringLiteral("export.scene"), &handleExportScene, buildSchema(
+        QStringLiteral("export.scene"), QStringLiteral("introspection"),
+        QStringLiteral("Writes the current draft scene, as-is (no piece nesting/cutting-layout arrangement -- see piece.* ops and docs/export-actions-notes.md for that out-of-scope Phase B work), to a vector, flat-DXF, or raster file. Read-only with respect to pattern data; only writes the output file itself."),
+        {
+            param(QStringLiteral("path"), QStringLiteral("string"), true,
+                QStringLiteral("Output file path. Parent directory created if missing.")),
+            param(QStringLiteral("format"), QStringLiteral("string"), false,
+                QStringLiteral("One of svg, pdf, ps, eps, png, jpg, bmp, ppm, tif, dxf-r10, dxf-r12, dxf-r13, dxf-r14, dxf-2000, dxf-2004, dxf-2007, dxf-2010, dxf-2013 (case-insensitive). Derived from \"path\"'s file extension if omitted, except a bare \".dxf\" extension -- which spans nine AutoCAD versions -- requires an explicit \"format\"; an unrecognized/absent extension falls back to png.")),
+            param(QStringLiteral("target"), QStringLiteral("string"), false,
+                QStringLiteral("Which scene to export. \"draft\" is the only value accepted today -- ActionContext exposes no piece scene to this op yet; anything else is a hard error, not a silent fallback."),
+                QStringLiteral("draft")),
+            param(QStringLiteral("padding"), QStringLiteral("number"), false,
+                QStringLiteral("Literal margin (scene units) added around the tight content bounding box on every side."), QStringLiteral("20")),
+            param(QStringLiteral("width"), QStringLiteral("number"), false,
+                QStringLiteral("Literal explicit device width (pixels for raster formats; scene units treated as the output's own unit for every vector/DXF format). Given with \"height\": used verbatim (may distort aspect ratio, by design). Given alone: the other dimension is derived from the content's aspect ratio.")),
+            param(QStringLiteral("height"), QStringLiteral("number"), false,
+                QStringLiteral("Literal explicit device height. See \"width\". Neither given: renders 1:1 scene-unit-to-device-unit, capped at 4096 on the larger dimension for raster formats only (a vector/DXF device never allocates a pixel buffer, so it is never capped).")),
+            param(QStringLiteral("background"), QStringLiteral("string"), false,
+                QStringLiteral("Raster formats (png/jpg/bmp/ppm/tif) only; silently unused for every other format. \"transparent\", \"white\", or a QColor-parsable string (e.g. \"#RRGGBB\"). Default depends on format: transparent for png/ppm/tif, white for jpg/bmp.")),
+            param(QStringLiteral("binaryDXF"), QStringLiteral("boolean"), false,
+                QStringLiteral("Literal flag: write a binary DXF file instead of ASCII. Only meaningful for the nine dxf-* formats; silently unused otherwise."), QStringLiteral("false")),
+            param(QStringLiteral("showPointNames"), QStringLiteral("boolean"), false,
+                QStringLiteral("Literal flag: force point-name labels (e.g. \"A1\", \"A2\") on (true) or off (false) for this export, overriding the pattern's own scene-wide setting for the duration of this one call only. Omit to leave the scene-wide setting exactly as the pattern/session already has it.")),
+        },
+        QStringLiteral(R"({ "op": "export.scene", "path": "square.svg" })"),
+        /*partial=*/true,
+        QStringLiteral("ps/eps export shells out to the external \"pdftops\" tool (from Poppler/Xpdf); it fails cleanly with a specific error if that binary is not on PATH, rather than producing output.")));
 
     registerAction(QStringLiteral("pattern.resolveName"), &handlePatternResolveName, buildSchema(
         QStringLiteral("pattern.resolveName"), QStringLiteral("introspection"),

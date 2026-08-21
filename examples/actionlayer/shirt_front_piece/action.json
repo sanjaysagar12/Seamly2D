@@ -19,6 +19,7 @@
         { "op": "piece.addPatternPiece", "name": "Front", "nodes": ["A1", "A2", "A3", "A4", "A5", "A6"], "seamAllowanceWidth": "10" },
         { "op": "pattern.dump" },
         { "op": "render.snapshot", "path": "examples/actionlayer/shirt_front_piece/shirt_front_piece.png", "width": 600, "height": 800, "showPointNames": true },
+        { "op": "export.scene", "path": "examples/actionlayer/shirt_front_piece/shirt_front_piece.dxf", "format": "dxf-2013" },
         { "op": "session.save", "path": "examples/actionlayer/shirt_front_piece/shirt_front_piece.val" }
     ]
 }

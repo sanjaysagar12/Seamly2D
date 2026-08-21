@@ -370,6 +370,53 @@ missing/empty `"path"`, `"unsupported format"`, `"unrecognized 'background' valu
 scene, nothing to render"` (`scene->items().isEmpty()`), `"could not create output directory"`,
 `"failed to save image to: <path>"` (`QImage::save()` returned false).
 
+### `export.scene`
+
+**Maps to:** no `Create()` call — writes `ctx.scene()` to a vector/DXF/raster device via
+`QPainter` (`QSvgGenerator`/`QPrinter`/`VDxfPaintDevice`/`QImage::save()`), the same
+render-the-current-draft-scene pattern `render.snapshot` uses, extended to every format
+Seamly2D's GUI "Export Draft Blocks As" action supports (Phase A of the action-layer export
+effort — nested cutting-layout export, `export.layout`/`export.pieces`, is a separate, not-yet-
+implemented Phase B; see `docs/export-actions-notes.md`).
+`src/libs/actionlayer/handlers/export_handlers.cpp:handleExportScene`
+
+| Parameter | Type | Required | Literal / Formula | Description |
+|---|---|---|---|---|
+| `path` | string | yes | — | Output file path. Parent directory created if missing. |
+| `format` | string | no (required whenever `path` ends in `.dxf`) | — | One of `svg`, `pdf`, `ps`, `eps`, `png`, `jpg`, `bmp`, `ppm`, `tif`, `dxf-r10`, `dxf-r12`, `dxf-r13`, `dxf-r14`, `dxf-2000`, `dxf-2004`, `dxf-2007`, `dxf-2010`, `dxf-2013` (case-insensitive). Derived from `path`'s file extension if omitted; a bare `.dxf` extension spans nine AutoCAD versions and cannot be disambiguated, so `format` is mandatory there. An unrecognized/absent extension falls back to `png`. |
+| `target` | string | no (default `"draft"`) | — | Same single-value guard as `render.snapshot` — `"draft"` is the only scene `ActionContext` exposes to this op today. |
+| `padding` | number | no (default `20.0`) | literal | Same semantics as `render.snapshot`: margin (scene units) added around the tight content bounding box on every side. |
+| `width` / `height` | number | no | literal | Explicit device dimensions — pixels for the five raster formats, scene units (the output's own unit) for every vector/DXF format. Both given: used verbatim (may distort aspect ratio, by design). One given: the other is derived from the content's aspect ratio. Neither given: renders 1:1 scene-unit-to-device-unit; for raster formats only, capped so the larger dimension never exceeds 4096px (a vector/DXF device never allocates a pixel buffer, so it is never capped). |
+| `background` | string | no | — | Raster formats only (`png`/`jpg`/`bmp`/`ppm`/`tif`); silently unused for every other format. Same semantics as `render.snapshot`: `"transparent"`, `"white"`, or a `QColor`-parsable string. |
+| `binaryDXF` | boolean | no (default `false`) | literal | Only meaningful for the nine `dxf-*` formats (maps to `VDxfPaintDevice::SetBinaryFormat`); silently unused otherwise. |
+| `showPointNames` | boolean | no | literal | Same semantics as `render.snapshot`: forces point-name labels on/off for this export only. |
+
+**Example request:**
+```json
+{ "op": "export.scene", "path": "square.svg" }
+```
+
+**Example success response:**
+```json
+{
+  "op": "export.scene", "status": "ok",
+  "path": "C:/.../square.svg",
+  "format": "svg",
+  "deviceSize": { "width": 140, "height": 140 },
+  "boundingBox": { "x": -20.0, "y": -20.0, "width": 140.0, "height": 140.0 }
+}
+```
+
+**Known error cases:** all plain-string — `"unsupported target"`, missing/empty `"path"`,
+`"'format' is required when 'path' ends in .dxf"`, `"unsupported format"`, `"unrecognized
+'background' value"`, `"empty scene, nothing to export"`, `"could not create output directory"`,
+plus per-writer failures naming the path/reason (`"failed to open SVG/PDF/DXF output: <path>"`,
+`"failed to save image to: <path>"`, `"could not start 'pdftops' ..."`, `"'pdftops' failed to
+produce output: ..."`). **Partial coverage note:** `ps`/`eps` export shells out to the external
+`pdftops` tool (Poppler/Xpdf) via `QProcess` — on a machine without it on `PATH`, those two
+formats fail cleanly with a specific error rather than producing output; every other format has
+no such external dependency.
+
 ## Points
 
 ### `basePoint`
@@ -1643,13 +1690,16 @@ implemented."
 
 Non-`VTool::Create()`-based introspection/session ops with no `Tool` enum counterpart at all:
 `pattern.dump`, `pattern.listMeasurements`, `pattern.listTools`, `pattern.resolveName`,
-`render.snapshot`, `point.edit`, `measurements.load`, `measurements.recompute`,
+`render.snapshot`, `export.scene`, `point.edit`, `measurements.load`, `measurements.recompute`,
 `measurements.sync`, `session.save`, `session.close`.
 
-**47 ops registered in `action_registry.cpp` total** (recounted directly against the registry's
-own `registerAction()` call list while writing this refresh, 20 Aug 2026): 45 fully implemented
-and exercised successfully via a real `actiond` run at some point during development, 2 partial
-(`piece.union`, `piece.insertNodes`) with documented, reproduced gaps.
+**48 ops registered in `action_registry.cpp` total** (47 as of the 20 Aug 2026 refresh, plus
+`export.scene` added 21 Aug 2026 — Phase A of the action-layer export effort, see
+`docs/export-actions-notes.md`): 45 fully implemented and exercised successfully via a real
+`actiond` run at some point during development, 2 partial (`piece.union`, `piece.insertNodes`)
+with documented, reproduced gaps, and 1 partial (`export.scene`, only in the sense that its
+`ps`/`eps` formats depend on an external `pdftops` binary — every other format has no such
+dependency).
 
 ## Findings
 

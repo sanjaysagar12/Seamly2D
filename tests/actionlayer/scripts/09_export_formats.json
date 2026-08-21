@@ -1,0 +1,11 @@
+{
+    "_description": "Phase A export.scene coverage: one basePoint + line to give the scene real content, then export.scene against svg, pdf, and dxf-2013 (one representative from each writer family -- vector, print, DXF). Raster formats are already covered by render.snapshot in 02_basepoint_and_line.json.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "export.scene", "path": "drawing.svg" },
+        { "op": "export.scene", "path": "drawing.pdf" },
+        { "op": "export.scene", "path": "drawing.dxf", "format": "dxf-2013" }
+    ]
+}

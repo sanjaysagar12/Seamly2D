@@ -24,6 +24,7 @@
 
 #include "tst_pattern_dump.h"          // Brings in TST_PatternDump, one of the test classes this binary runs.
 #include "tst_render_snapshot.h"       // Brings in TST_RenderSnapshot, another test class this binary runs.
+#include "tst_export_scene.h"          // Brings in TST_ExportScene, covering "export.scene" (Phase A direct scene export).
 #include "tst_name_resolver.h"         // Brings in TST_NameResolver, Phase 4's pure-C++ NameResolver coverage.
 #include "tst_action_engine_batches.h" // Brings in TST_ActionEngineBatches, Phase 4's JSON batch/fixture coverage.
 #include "tst_action_schema.h"         // Brings in TST_ActionSchema, the `actiond --list-tools` drift-detection coverage.
@@ -100,6 +101,9 @@ int main(int argc, char **argv)
 
     TST_RenderSnapshot renderSnapshotTest;                     // Exercises render.snapshot.
     status |= QTest::qExec(&renderSnapshotTest, argc, argv);   // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
+
+    TST_ExportScene exportSceneTest;                           // Exercises export.scene (Phase A direct scene export).
+    status |= QTest::qExec(&exportSceneTest, argc, argv);      // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
 
     TST_NameResolver nameResolverTest;                         // Exercises NameResolver directly (no JSON involved).
     status |= QTest::qExec(&nameResolverTest, argc, argv);     // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.

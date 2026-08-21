@@ -185,3 +185,4 @@ target_wrapper.sh
 docs/*
 !docs/action-layer-schema.md
 !docs/ARCHITECTURE.md
+!docs/export-actions-notes.md
