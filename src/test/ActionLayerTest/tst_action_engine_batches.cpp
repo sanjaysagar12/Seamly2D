@@ -243,7 +243,9 @@ void TST_ActionEngineBatches::testEngineCatchesEscapedVException()
     registry.registerAction(QStringLiteral("test.throwsVException"),
         [](const QJsonObject &, const ActionContext &) -> ActionResult {
             throw VExceptionBadId(QStringLiteral("test-induced failure"), quint32(999)); // Deliberately uncaught here.
-        });
+        },
+        ActionSchema{QStringLiteral("test.throwsVException"), QStringLiteral("session"),
+            QStringLiteral("Test-only handler that always throws VExceptionBadId; not a real op."), {}, QStringLiteral("{}")}); // Minimal schema: registerAction() now requires one for every registration, including this throwaway test fixture.
     ActionEngine engine(registry);
 
     const QJsonObject failingAction{{"op", QStringLiteral("test.throwsVException")}};
@@ -277,7 +279,9 @@ void TST_ActionEngineBatches::testEngineCatchesEscapedStdException()
     registry.registerAction(QStringLiteral("test.throwsStdException"),
         [](const QJsonObject &, const ActionContext &) -> ActionResult {
             throw std::runtime_error("plain std::exception, not a VException"); // Deliberately uncaught here.
-        });
+        },
+        ActionSchema{QStringLiteral("test.throwsStdException"), QStringLiteral("session"),
+            QStringLiteral("Test-only handler that always throws std::runtime_error; not a real op."), {}, QStringLiteral("{}")}); // Minimal schema: registerAction() now requires one for every registration, including this throwaway test fixture.
     ActionEngine engine(registry);
 
     const QJsonObject action{{"op", QStringLiteral("test.throwsStdException")}};

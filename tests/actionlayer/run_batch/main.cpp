@@ -406,6 +406,68 @@ namespace
         err << QStringLiteral("    actual response: %1/response.json\n").arg(caseOutputDir);
         return false;
     }
+
+    // Regression check for the `actiond --list-tools` command (action_registry.cpp's
+    // registerBuiltinActions()/tool_catalog.cpp/src/app/actiond/main.cpp's --list-tools handling):
+    // spawns `actiond --list-tools --format=ai` directly (no --pattern/--actions involved -- this
+    // command is pure introspection over ActionRegistry) and checks its stdout is valid, parseable
+    // JSON forming a non-empty array, with nothing else mixed into stdout. This is the CLI-surface
+    // half of that command's drift-detection coverage; the complementary "does the entry count match
+    // ActionRegistry::actionCount()" check lives in src/test/ActionLayerTest/tst_action_schema.cpp,
+    // which links actionlayer directly and so can compare against the registry's own live count --
+    // something this Qt-core-only harness has no way to do (see run_batch.pro's own comment on why
+    // it deliberately does not link any Seamly2D lib).
+    bool checkListToolsAi(const QString &actiondExe)
+    {
+        QProcess proc;
+        proc.start(actiondExe, QStringList() << QStringLiteral("--list-tools") << QStringLiteral("--format=ai"));
+        if (!proc.waitForStarted(10000))
+        {
+            err << QStringLiteral("[list_tools_ai] ERROR: could not start actiond at %1\n").arg(actiondExe);
+            return false;
+        }
+        proc.waitForFinished(15000);
+
+        if (proc.exitCode() != 0)
+        {
+            err << QStringLiteral("[list_tools_ai] FAIL: actiond --list-tools --format=ai exited %1 -- stderr: %2\n")
+                       .arg(proc.exitCode()).arg(QString::fromUtf8(proc.readAllStandardError().trimmed()));
+            return false;
+        }
+
+        const QByteArray stdoutBytes = proc.readAllStandardOutput();
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(stdoutBytes, &parseError);
+        if (parseError.error != QJsonParseError::NoError)
+        {
+            err << QStringLiteral("[list_tools_ai] FAIL: stdout was not valid JSON: %1\n").arg(parseError.errorString());
+            return false;
+        }
+        if (!document.isArray())
+        {
+            err << QStringLiteral("[list_tools_ai] FAIL: top-level JSON value must be an array\n");
+            return false;
+        }
+        const QJsonArray tools = document.array();
+        if (tools.isEmpty())
+        {
+            err << QStringLiteral("[list_tools_ai] FAIL: tools array must not be empty\n");
+            return false;
+        }
+        for (const QJsonValue &value : tools)
+        {
+            if (!value.isObject() || value.toObject().value(QStringLiteral("name")).toString().isEmpty()
+                || value.toObject().value(QStringLiteral("description")).toString().isEmpty()
+                || !value.toObject().value(QStringLiteral("input_schema")).isObject())
+            {
+                err << QStringLiteral("[list_tools_ai] FAIL: an entry is missing the minimal {\"name\",\"description\",\"input_schema\"} shape\n");
+                return false;
+            }
+        }
+
+        out << QStringLiteral("[list_tools_ai] PASS (%1 tools)\n").arg(tools.size());
+        return true;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -454,8 +516,15 @@ int main(int argc, char *argv[])
                 ++passed;
             }
         }
-        out << QStringLiteral("%1/%2 case(s) passed.\n").arg(passed).arg(scripts.size());
-        return passed == scripts.size() ? 0 : 1;
+
+        const int totalChecks = scripts.size() + 1; // +1 for checkListToolsAi() below, an actiond-CLI check independent of any scripts/*.json case.
+        if (checkListToolsAi(actiondExe))
+        {
+            ++passed;
+        }
+
+        out << QStringLiteral("%1/%2 case(s) passed.\n").arg(passed).arg(totalChecks);
+        return passed == totalChecks ? 0 : 1;
     }
 
     // Single-case mode: classify 1-3 positional args by extension.

@@ -5,6 +5,7 @@ SOURCES += \
     $$PWD/action_registry.cpp \
     $$PWD/action_engine.cpp \
     $$PWD/name_resolver.cpp \
+    $$PWD/tool_catalog.cpp \
     $$PWD/handlers/pattern_dump_handler.cpp \
     $$PWD/handlers/pattern_measurements_handler.cpp \
     $$PWD/handlers/pattern_list_tools_handler.cpp \
@@ -28,8 +29,10 @@ HEADERS += \
     $$PWD/action_registry.h \
     $$PWD/action_engine.h \
     $$PWD/action_result.h \
+    $$PWD/action_schema.h \
     $$PWD/action_error.h \
     $$PWD/name_resolver.h \
+    $$PWD/tool_catalog.h \
     $$PWD/stable.h \
     $$PWD/handlers/pattern_dump_handler.h \
     $$PWD/handlers/pattern_measurements_handler.h \

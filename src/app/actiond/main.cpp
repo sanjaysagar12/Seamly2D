@@ -27,12 +27,15 @@
 #include "pattern_session.h"      // Brings in PatternSession, the persistent-daemon-mode pattern state.
 #include "session_server.h"       // Brings in SessionServer::run(), the persistent-daemon-mode NDJSON loop.
 
+#include "../../libs/actionlayer/action_registry.h" // Brings in ActionRegistry, the pure-introspection data source for --list-tools (needs no pattern/scene at all).
+#include "../../libs/actionlayer/tool_catalog.h"     // Brings in ToolCatalog::renderHuman()/renderAi(), the two --list-tools output formats.
 #include "../../libs/ifc/exception/vexception.h" // Brings in VException, the type every reused Seamly2D loading call throws on failure.
 
 #include <QCommandLineOption>  // Provides QCommandLineOption, used to declare every --flag below.
 #include <QCommandLineParser>  // Provides QCommandLineParser, used to parse and validate argv against them.
 #include <QDir>                // Provides QDir::mkpath()/setCurrent(), used to prepare --output-dir for daemon mode.
 #include <QFile>               // Provides QFile, used to read the one-shot mode's actions file and to wrap stdin/stdout for daemon mode.
+#include <QJsonArray>          // Provides QJsonArray, the return type of ToolCatalog::renderAi(), printed directly for --format ai.
 #include <QJsonDocument>       // Provides QJsonDocument, both the parsed actions script and the printed result type.
 #include <QJsonObject>         // Provides QJsonObject, used to build the {"error": "..."} failure payload.
 #include <QJsonParseError>     // Provides QJsonParseError, used to detect and report malformed actions JSON.
@@ -105,12 +108,46 @@ int main(int argc, char *argv[])
     const QCommandLineOption outputDirOption(QStringLiteral("output-dir"),
         QStringLiteral("Daemon mode only: directory relative paths in render.snapshot/session.save actions resolve against. Created if missing."),
         QStringLiteral("dir"), QStringLiteral("./output"));
+    const QCommandLineOption listToolsOption(QStringLiteral("list-tools"),
+        QStringLiteral("Print every registered action's schema (op, description, parameters) and exit. Pure introspection over ActionRegistry -- no --pattern/--measurements/--actions needed, and none is loaded. Requires --format."));
+    const QCommandLineOption formatOption(QStringLiteral("format"),
+        QStringLiteral("Output format for --list-tools: \"human\" (readable text) or \"ai\" (a single JSON array shaped like a standard LLM tool-definition list, nothing else written to stdout)."),
+        QStringLiteral("human|ai"));
     parser.addOption(patternOption);
     parser.addOption(measurementsOption);
     parser.addOption(actionsOption);
     parser.addOption(savePatternOption);
     parser.addOption(outputDirOption);
+    parser.addOption(listToolsOption);
+    parser.addOption(formatOption);
     parser.process(app); // Parses argv; also handles --help/--version and unknown-option errors itself.
+
+    // --list-tools is pure introspection over ActionRegistry (see action_registry.cpp's
+    // registerBuiltinActions(), which pairs every handler with an ActionSchema at the same call
+    // site): it needs no pattern, no measurements, no scene, and runs before any of that machinery
+    // below is touched at all, so a caller can run `actiond --list-tools --format=ai` standalone.
+    if (parser.isSet(listToolsOption))
+    {
+        const QString format = parser.value(formatOption);
+        if (format != QStringLiteral("human") && format != QStringLiteral("ai"))
+        {
+            QTextStream(stderr) << QStringLiteral("Usage: actiond --list-tools --format=<human|ai>") << Qt::endl;
+            return 2; // Same usage-error exit code as the pre-existing "--actions without --pattern" check below.
+        }
+
+        ActionRegistry registry; // Auto-registers every built-in handler + schema on construction; no PatternSession/scene involved.
+
+        if (format == QStringLiteral("human"))
+        {
+            QTextStream(stdout) << ToolCatalog::renderHuman(registry) << Qt::endl;
+        }
+        else // format == "ai": exactly one JSON array on stdout, nothing else -- see this option's own description above.
+        {
+            const QJsonDocument document(ToolCatalog::renderAi(registry));
+            QTextStream(stdout) << QString::fromUtf8(document.toJson(QJsonDocument::Compact)) << Qt::endl;
+        }
+        return 0;
+    }
 
     const bool oneShotMode = parser.isSet(actionsOption);
 

@@ -26,6 +26,7 @@
 #include "tst_render_snapshot.h"       // Brings in TST_RenderSnapshot, another test class this binary runs.
 #include "tst_name_resolver.h"         // Brings in TST_NameResolver, Phase 4's pure-C++ NameResolver coverage.
 #include "tst_action_engine_batches.h" // Brings in TST_ActionEngineBatches, Phase 4's JSON batch/fixture coverage.
+#include "tst_action_schema.h"         // Brings in TST_ActionSchema, the `actiond --list-tools` drift-detection coverage.
 
 #include "../../libs/vmisc/vabstractapplication.h" // Brings in VAbstractApplication; constructing any VAbstractPattern needs a live qApp of this type.
 #include "../../libs/vpatterndb/vtranslatevars.h"  // Brings in VTranslateVars, the return type of translateVariables() below.
@@ -105,6 +106,9 @@ int main(int argc, char **argv)
 
     TST_ActionEngineBatches actionEngineBatchesTest;            // Exercises pattern.resolveName and resolver-error serialization via full JSON batches.
     status |= QTest::qExec(&actionEngineBatchesTest, argc, argv); // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
+
+    TST_ActionSchema actionSchemaTest;                          // Exercises the `actiond --list-tools` command's drift-detection guarantees.
+    status |= QTest::qExec(&actionSchemaTest, argc, argv);      // Runs every slot in this class; bitwise-OR preserves a prior failure's non-zero code.
 
     return status; // Non-zero if any test class reported any failure.
 }

@@ -42,7 +42,8 @@ SOURCES += \
     tst_pattern_dump.cpp \
     tst_render_snapshot.cpp \
     tst_name_resolver.cpp \
-    tst_action_engine_batches.cpp
+    tst_action_engine_batches.cpp \
+    tst_action_schema.cpp
 
 *msvc*:SOURCES += stable.cpp
 
@@ -52,7 +53,8 @@ HEADERS += \
     tst_pattern_dump.h \
     tst_render_snapshot.h \
     tst_name_resolver.h \
-    tst_action_engine_batches.h
+    tst_action_engine_batches.h \
+    tst_action_schema.h
 
 # Fixture JSON files for tst_action_engine_batches.cpp; not compiled, but listed so they show up
 # in IDEs and so `make dist`/packaging steps that walk DISTFILES pick them up. Loaded at test-run
