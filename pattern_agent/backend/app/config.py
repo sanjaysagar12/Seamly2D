@@ -18,6 +18,14 @@ ACTIOND_EXE = Path(
     )
 )
 
+# Built React static assets (frontend/`npm run build`'s dist/), served directly by this backend
+# when present -- see main.py's static mount, added last so it never shadows /api, /files, /ws.
+# Not present in the plain local-dev flow (README's `npm run dev` + vite proxy instead), so
+# main.py checks .is_dir() before mounting rather than assuming this exists.
+FRONTEND_DIST_DIR = Path(
+    os.environ.get("FRONTEND_DIST_DIR", str(REPO_ROOT / "pattern_agent" / "frontend" / "dist"))
+)
+
 DATA_DIR = Path(os.environ.get("PATTERN_AGENT_DATA_DIR", str(BACKEND_DIR / "data")))
 MEASUREMENTS_DIR = DATA_DIR / "measurements"
 SESSIONS_DIR = DATA_DIR / "sessions"

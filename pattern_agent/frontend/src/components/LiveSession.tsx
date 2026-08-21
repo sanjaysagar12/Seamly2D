@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { downloadValUrl, getSession, resumeSession, sendMessage, stepSession, stopSession } from '../lib/api'
+import {
+  downloadValUrl,
+  getSession,
+  listModels,
+  resumeSession,
+  sendMessage,
+  stepSession,
+  stopSession,
+  updateSessionSettings,
+} from '../lib/api'
 import { useSessionSocket } from '../lib/useSessionSocket'
-import { STOP_REASON_LABELS, type StepRecord } from '../lib/types'
+import { STOP_REASON_LABELS, type ModelOption, type StepRecord } from '../lib/types'
 import './LiveSession.css'
 
 interface Props {
@@ -80,15 +89,33 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
   const timelineRef = useRef<HTMLDivElement>(null)
   const autoScroll = useRef(true)
 
+  // Runtime settings panel: change model / Anthropic API key / system prompt on the live
+  // session without restarting it. apiKeyInput is deliberately never prefilled from the
+  // server (see api.ts's updateSessionSettings comment -- it's write-only end to end).
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [settingsBusy, setSettingsBusy] = useState(false)
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
   useEffect(() => {
     getSession(sessionId)
       .then((detail) => {
         setGoal(detail.goal)
         setStepLimit(detail.stepLimit)
         setModel(detail.model)
+        setSystemPrompt(detail.systemPrompt)
       })
       .catch(() => {})
   }, [sessionId])
+
+  useEffect(() => {
+    listModels()
+      .then((data) => setModels(data.models))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!autoScroll.current || !timelineRef.current) return
@@ -108,6 +135,10 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
   // Chat can revive a paused, complete, or errored session (it (re)opens actiond from
   // the last save) -- only blocked while the loop is actively mid-turn.
   const canChat = state.status !== 'running'
+  // Same reasoning as canChat: the backend refuses update_settings mid-turn too (swapping
+  // the client/prompt out from under an in-flight streamed call is undefined), so mirror
+  // that guard here rather than let the user hit a 409.
+  const canEditSettings = state.status !== 'running'
 
   async function withBusy(fn: () => Promise<void>) {
     setBusy(true)
@@ -136,6 +167,27 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
     }
   }
 
+  async function handleApplySettings() {
+    setSettingsBusy(true)
+    setSettingsError(null)
+    setSettingsSaved(false)
+    try {
+      await updateSessionSettings(sessionId, {
+        model,
+        systemPrompt,
+        // Omit entirely unless the user actually typed something -- see api.ts's comment on
+        // why an empty string is not the same as "no change" here.
+        ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
+      })
+      setApiKeyInput('') // never leave a typed secret sitting in the field longer than needed
+      setSettingsSaved(true)
+    } catch (err) {
+      setSettingsError(String(err))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
   return (
     <div className="live-session">
       <header className="live-header">
@@ -153,8 +205,80 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
             step {Math.max(0, ...state.steps.map((s) => s.step))}
             {stepLimit ? ` / ${stepLimit}` : ''}
           </span>
+          <button
+            type="button"
+            className={`settings-toggle ${settingsOpen ? 'settings-toggle-active' : ''}`}
+            onClick={() => setSettingsOpen((v) => !v)}
+            title="Change model, API key, or system prompt"
+          >
+            ⚙ Settings
+          </button>
         </div>
       </header>
+
+      {settingsOpen && (
+        <div className="settings-panel">
+          {!canEditSettings && (
+            <div className="settings-hint">Wait for the current step to finish before changing settings.</div>
+          )}
+          <div className="settings-row">
+            <div className="settings-col">
+              <label className="field-label" htmlFor="settings-model">
+                Model
+              </label>
+              <select
+                id="settings-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={!canEditSettings}
+              >
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="settings-col">
+              <label className="field-label" htmlFor="settings-api-key">
+                Anthropic API key
+              </label>
+              <input
+                id="settings-api-key"
+                type="password"
+                autoComplete="off"
+                placeholder="Leave blank to keep the current key"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                disabled={!canEditSettings}
+              />
+            </div>
+          </div>
+          <div className="settings-col settings-col-wide">
+            <label className="field-label" htmlFor="settings-system-prompt">
+              System prompt
+            </label>
+            <textarea
+              id="settings-system-prompt"
+              rows={8}
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              disabled={!canEditSettings}
+            />
+          </div>
+          <div className="settings-actions">
+            <button
+              type="button"
+              disabled={!canEditSettings || settingsBusy}
+              onClick={() => void handleApplySettings()}
+            >
+              {settingsBusy ? 'Applying…' : 'Apply'}
+            </button>
+            {settingsSaved && <span className="settings-saved">Saved — takes effect next turn.</span>}
+            {settingsError && <span className="settings-error">{settingsError}</span>}
+          </div>
+        </div>
+      )}
 
       {state.stopReason && (
         <div className={`stop-banner stop-banner-${state.status}`}>

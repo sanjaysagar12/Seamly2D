@@ -1,0 +1,15 @@
+**/node_modules
+frontend/dist
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/.pytest_cache
+backend/.env
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
+backend/data/sessions/*
+!backend/data/sessions/.gitkeep
+backend/data/measurements/*
+!backend/data/measurements/.gitkeep

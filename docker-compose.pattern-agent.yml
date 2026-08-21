@@ -1,0 +1,32 @@
+# Pattern Agent: one container, one port. API + built React frontend served by the same uvicorn
+# process (see pattern_agent/backend/app/main.py's static mount), built FROM
+# seamly2d-actiond:latest. Build that base first:
+#   docker build -f Dockerfile.actiond -t seamly2d-actiond:latest .
+#
+# Usage:
+#   docker compose -f docker-compose.pattern-agent.yml up -d --build
+#   curl http://localhost:6100/api/measurements
+#   open http://localhost:6100/
+services:
+  pattern-agent:
+    build:
+      context: ./pattern_agent
+      dockerfile: backend/Dockerfile
+      args:
+        BASE_IMAGE: seamly2d-actiond:latest
+    image: pattern-agent:latest
+    container_name: pattern-agent
+    ports:
+      - "6100:6100"
+    environment:
+      # Optional: without a real key, /api/sessions still starts a session and spawns a real
+      # actiond subprocess -- it just reaches a clean "error" status once the loop's first
+      # Claude call fails auth, which is enough to prove the whole stack is wired up correctly.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:6100/api/measurements', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

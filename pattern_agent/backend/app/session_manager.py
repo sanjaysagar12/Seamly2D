@@ -13,6 +13,7 @@ import anthropic
 
 from . import config, db
 from .actiond_process import ActiondSession
+from .agent_loop import SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT
 from .agent_loop import AgentSession
 from .tool_schema import load_tool_catalog
 
@@ -298,6 +299,48 @@ class SessionManager:
         await design_session.agent.inject_user_message(text)
         if auto_resume:
             design_session.run_task = asyncio.create_task(self._run_loop(design_session))
+
+    async def update_settings(
+        self,
+        session_id: str,
+        model: str | None = None,
+        api_key: str | None = None,
+        system_prompt: str | None = None,
+    ) -> None:
+        """Live-edits an existing session's model / Anthropic credentials / system prompt --
+        each takes effect on the *next* Claude call, no backend restart or session restart
+        needed. Refuses while the loop is actively mid-turn (same guard as send_message):
+        swapping the client or prompt out from under an in-flight streaming call is undefined.
+
+        None of the three are persisted to the database (unlike step_limit/goal/etc. in
+        db_row()) -- the API key deliberately never touches sqlite or the logs (see
+        _get_client()'s own masked-logging precedent for why that matters), and letting
+        model/system_prompt revert to their session-start values on a backend restart is an
+        acceptable trade for not adding a migration for two rarely-changed, easily-re-set
+        fields. Each argument left as None leaves that setting unchanged.
+        """
+        design_session = self.get(session_id)
+        if design_session.run_task is not None and not design_session.run_task.done():
+            raise RuntimeError("Session is actively running; stop it before changing settings.")
+        agent = design_session.agent
+
+        if model is not None:
+            if model not in config.SELECTABLE_MODELS:
+                raise ValueError(
+                    f"Unknown model {model!r}; must be one of {sorted(config.SELECTABLE_MODELS)}"
+                )
+            agent.model = model
+
+        if api_key is not None:
+            key = api_key.strip()
+            # Falls through to the SDK's own credential resolution if blanked out, same as
+            # _get_client()'s own default-session behavior.
+            agent.client = anthropic.AsyncAnthropic(api_key=key) if key else anthropic.AsyncAnthropic()
+
+        if system_prompt is not None:
+            agent.system_prompt = system_prompt.strip() or DEFAULT_SYSTEM_PROMPT
+
+        await self._persist_session(design_session)
 
     async def stop_session(self, session_id: str) -> None:
         design_session = self.get(session_id)

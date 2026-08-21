@@ -100,6 +100,115 @@
   background: var(--err-soft);
 }
 
+.settings-toggle {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--ink-dim);
+  font-size: 11px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+.settings-toggle:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+.settings-toggle-active {
+  color: var(--accent);
+  border-color: rgba(255, 157, 61, 0.35);
+  background: var(--accent-soft);
+}
+
+.settings-panel {
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-hint {
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.settings-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.settings-col-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-panel select,
+.settings-panel input[type='password'],
+.settings-panel textarea {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.settings-panel textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.settings-panel select:focus,
+.settings-panel input:focus,
+.settings-panel textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-actions button {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-actions button:disabled {
+  background: var(--bg-raised);
+  color: var(--ink-faint);
+  opacity: 1;
+}
+
+.settings-saved {
+  font-size: 12.5px;
+  color: var(--ok);
+}
+
+.settings-error {
+  font-size: 12.5px;
+  color: var(--err);
+}
+
 .stop-banner,
 .error-banner {
   padding: 10px 28px;

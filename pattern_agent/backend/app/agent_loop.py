@@ -78,6 +78,7 @@ class AgentSession:
         emit: EmitFn,
         step_limit: int = config.DEFAULT_STEP_LIMIT,
         model: str = config.ANTHROPIC_MODEL,
+        system_prompt: str | None = None,
     ):
         self.session_id = session_id
         self.actiond = actiond
@@ -90,6 +91,11 @@ class AgentSession:
         self.emit = emit
         self.step_limit = step_limit
         self.model = model
+        # Instance attribute (not just a reference to the module constant) so
+        # session_manager.update_settings() can override it per session at runtime, same as
+        # self.model/self.client -- see that method's docstring for why none of the three are
+        # persisted to the database.
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
 
         self.messages: list[dict[str, Any]] = []
         self.step = 0
@@ -342,7 +348,7 @@ class AgentSession:
         async with self.client.messages.stream(
             model=self.model,
             max_tokens=config.ANTHROPIC_MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=self.system_prompt,
             tools=self.tools,
             tool_choice={"type": "any", "disable_parallel_tool_use": True},
             messages=self.messages,

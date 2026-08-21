@@ -1,5 +1,9 @@
 *~
 
+# docker compose auto-loads this for ANTHROPIC_API_KEY etc. (see docker-compose.pattern-agent.yml)
+# -- must never be committed.
+.env
+
 # Seamly2D lock files
 *.locked
 

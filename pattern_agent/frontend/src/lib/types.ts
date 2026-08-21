@@ -54,6 +54,7 @@ export interface SessionDetail extends SessionSummary {
   stepLimit: number
   finalSummary: string | null
   valUrl: string | null
+  systemPrompt: string
 }
 
 export interface ModelOption {

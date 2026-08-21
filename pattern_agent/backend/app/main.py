@@ -137,10 +137,40 @@ async def get_session(session_id: str):
         "stepLimit": agent.step_limit,
         "goal": agent.goal,
         "model": agent.model,
+        # Never the API key -- see update_session_settings below. The system prompt itself
+        # isn't a secret; sent back so the settings panel can prefill its textarea with
+        # whatever is actually in effect right now, not just the built-in default.
+        "systemPrompt": agent.system_prompt,
         "stopReason": agent.stop_reason,
         "finalSummary": agent.final_summary,
         "valUrl": f"/files/{session_id}/final.val" if agent.final_val_path else None,
     }
+
+
+class UpdateSessionSettingsRequest(BaseModel):
+    model: Optional[str] = None
+    apiKey: Optional[str] = None
+    systemPrompt: Optional[str] = None
+
+
+@app.post("/api/sessions/{session_id}/settings")
+async def update_session_settings(session_id: str, req: UpdateSessionSettingsRequest):
+    """Live-edits model / Anthropic API key / system prompt for an existing session -- see
+    SessionManager.update_settings()'s docstring for exactly what does and doesn't persist.
+    Every field is optional and independent: omit whichever ones you don't want to change.
+    The API key is write-only by design -- it is never echoed back by this or any other
+    endpoint (see get_session above)."""
+    try:
+        await manager.update_settings(
+            session_id, model=req.model, api_key=req.apiKey, system_prompt=req.systemPrompt
+        )
+    except SessionNotFoundError:
+        raise HTTPException(404, "Session not found")
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True}
 
 
 @app.post("/api/sessions/{session_id}/stop")
@@ -229,3 +259,17 @@ async def session_events(websocket: WebSocket, session_id: str):
         pass
     finally:
         design_session.unsubscribe(queue)
+
+
+# ---------------------------------------------------------------------------
+# Built frontend (frontend/`npm run build`'s dist/), if present
+# ---------------------------------------------------------------------------
+# Mounted last and only at "/" (a catch-all) so every /api, /files, /ws route above -- all
+# registered earlier -- is matched first; Starlette tries routes in registration order, so this
+# mount only ever serves paths nothing above claimed. html=True serves dist/index.html for "/"
+# and any other path that isn't a real file, which is what a single-page app needs (this app has
+# no client-side router today, but that's what would fall through to on a hard refresh of a
+# deep link if one were added later). Absent locally (README's `npm run dev` + vite proxy is the
+# local-dev path instead) -- guarded so uvicorn still starts fine without a built dist/.
+if config.FRONTEND_DIST_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(config.FRONTEND_DIST_DIR), html=True), name="frontend")

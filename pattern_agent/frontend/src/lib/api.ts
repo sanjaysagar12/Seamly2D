@@ -71,6 +71,21 @@ export async function sendMessage(sessionId: string, text: string): Promise<void
   })
 }
 
+// apiKey is write-only end to end: the backend never echoes it back (see main.py's
+// get_session/update_session_settings), so omit the field entirely rather than sending an
+// empty string when the user hasn't typed a new one -- an empty string is a real instruction
+// ("drop the override, fall back to the SDK's own credential resolution"), not a no-op.
+export async function updateSessionSettings(
+  sessionId: string,
+  params: { model?: string; apiKey?: string; systemPrompt?: string },
+): Promise<void> {
+  await req(`/api/sessions/${sessionId}/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+}
+
 export function downloadValUrl(sessionId: string): string {
   return `/api/sessions/${sessionId}/download`
 }
