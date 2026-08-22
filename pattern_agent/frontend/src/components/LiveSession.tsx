@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   downloadValUrl,
+  getPieceSnapshot,
   getSession,
   listModels,
+  listSessionPieces,
   resumeSession,
   sendMessage,
   stepSession,
@@ -10,7 +12,7 @@ import {
   updateSessionSettings,
 } from '../lib/api'
 import { useSessionSocket } from '../lib/useSessionSocket'
-import { STOP_REASON_LABELS, type ModelOption, type StepRecord } from '../lib/types'
+import { STOP_REASON_LABELS, type ModelOption, type PieceInfo, type StepRecord } from '../lib/types'
 import './LiveSession.css'
 
 interface Props {
@@ -43,6 +45,7 @@ function StepEntry({
 }) {
   const isInitial = record.step === 0 && !record.action
   const success = record.result?.success
+  const hasAiResponse = Boolean(record.thinking || record.text)
 
   return (
     <div className={`step-entry ${active ? 'step-entry-active' : ''}`} onClick={onSelect}>
@@ -58,8 +61,13 @@ function StepEntry({
         {isInitial && <span className="step-op">Initial state</span>}
       </div>
 
-      {record.thinking && <p className="step-thinking">{record.thinking}</p>}
-      {record.text && <p className="step-text">{record.text}</p>}
+      {hasAiResponse && (
+        <details className="step-ai-response" onClick={(e) => e.stopPropagation()}>
+          <summary>AI response (debug)</summary>
+          {record.thinking && <p className="step-thinking">{record.thinking}</p>}
+          {record.text && <p className="step-text">{record.text}</p>}
+        </details>
+      )}
 
       {record.action && (
         <pre className="step-json mono">{formatValue(record.action.input)}</pre>
@@ -100,6 +108,14 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [settingsSaved, setSettingsSaved] = useState(false)
 
+  // Piece switcher: null = viewing the whole draft (the default, existing behavior);
+  // a piece name = viewing an on-demand close-up of just that piece instead.
+  const [pieces, setPieces] = useState<PieceInfo[]>([])
+  const [viewPiece, setViewPiece] = useState<string | null>(null)
+  const [pieceSnapshotUrl, setPieceSnapshotUrl] = useState<string | null>(null)
+  const [pieceBusy, setPieceBusy] = useState(false)
+  const [pieceError, setPieceError] = useState<string | null>(null)
+
   useEffect(() => {
     getSession(sessionId)
       .then((detail) => {
@@ -121,6 +137,41 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
     if (!autoScroll.current || !timelineRef.current) return
     timelineRef.current.scrollTop = timelineRef.current.scrollHeight
   }, [state.steps])
+
+  // Refresh the piece list whenever a new step lands (the agent may have just created
+  // one) or the backend reports the agent switched its own attention to a piece.
+  useEffect(() => {
+    listSessionPieces(sessionId)
+      .then((list) => setPieces(list))
+      .catch(() => {}) // e.g. actiond not started yet -- harmless, just no pieces to show
+  }, [sessionId, state.steps.length, state.currentPiece])
+
+  // If we're looking at a specific piece and the agent's own loop renders a fresh
+  // close-up of that same piece, follow it live instead of going stale.
+  useEffect(() => {
+    if (viewPiece && state.pieceSnapshots[viewPiece]) {
+      setPieceSnapshotUrl(state.pieceSnapshots[viewPiece])
+    }
+  }, [viewPiece, state.pieceSnapshots])
+
+  async function handleViewPieceChange(piece: string) {
+    if (!piece) {
+      setViewPiece(null)
+      setPieceError(null)
+      return
+    }
+    setViewPiece(piece)
+    setPieceBusy(true)
+    setPieceError(null)
+    try {
+      const result = await getPieceSnapshot(sessionId, piece)
+      setPieceSnapshotUrl(result.url)
+    } catch (err) {
+      setPieceError(String(err))
+    } finally {
+      setPieceBusy(false)
+    }
+  }
 
   const latestWithSnapshot = useMemo(
     () => [...state.steps].reverse().find((s) => s.snapshotUrl),
@@ -298,16 +349,45 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
 
       <div className="live-body">
         <div className="snapshot-panel">
+          {pieces.length > 0 && (
+            <div className="piece-switcher">
+              <label className="field-label" htmlFor="piece-view">
+                View
+              </label>
+              <select
+                id="piece-view"
+                value={viewPiece ?? ''}
+                onChange={(e) => void handleViewPieceChange(e.target.value)}
+              >
+                <option value="">Whole draft</option>
+                {pieces.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                    {state.currentPiece === p.name ? ' (agent focus)' : ''}
+                  </option>
+                ))}
+              </select>
+              {pieceBusy && <span className="piece-switcher-busy mono">rendering…</span>}
+              {pieceError && <span className="piece-switcher-error">{pieceError}</span>}
+            </div>
+          )}
+
           <div className="snapshot-frame">
-            {displayed?.snapshotUrl ? (
+            {viewPiece ? (
+              pieceSnapshotUrl ? (
+                <img src={pieceSnapshotUrl} alt={`Close-up of piece ${viewPiece}`} />
+              ) : (
+                <div className="snapshot-placeholder">{pieceBusy ? 'Rendering…' : 'No snapshot yet'}</div>
+              )
+            ) : displayed?.snapshotUrl ? (
               <img src={displayed.snapshotUrl} alt={`Pattern snapshot at step ${displayed.step}`} />
             ) : (
               <div className="snapshot-placeholder">No snapshot yet</div>
             )}
           </div>
           <div className="snapshot-caption mono">
-            {displayed ? `step ${displayed.step}` : ''}
-            {selectedStep !== null && (
+            {viewPiece ? `piece: ${viewPiece}` : displayed ? `step ${displayed.step}` : ''}
+            {!viewPiece && selectedStep !== null && (
               <button className="link-button" onClick={() => setSelectedStep(null)}>
                 jump to latest
               </button>

@@ -1,4 +1,4 @@
-import type { ModelOption, SessionDetail, SessionSummary } from './types'
+import type { ModelOption, PieceInfo, SessionDetail, SessionSummary } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init)
@@ -39,10 +39,28 @@ export async function uploadPattern(file: File): Promise<string> {
   return data.filename
 }
 
+export async function listPatternPieces(filename: string): Promise<PieceInfo[]> {
+  const data = await req<{ pieces: PieceInfo[] }>(`/api/patterns/${encodeURIComponent(filename)}/pieces`)
+  return data.pieces
+}
+
+export async function listSessionPieces(sessionId: string): Promise<PieceInfo[]> {
+  const data = await req<{ pieces: PieceInfo[] }>(`/api/sessions/${sessionId}/pieces`)
+  return data.pieces
+}
+
+export async function getPieceSnapshot(
+  sessionId: string,
+  piece: string,
+): Promise<{ piece: string; url: string }> {
+  return req(`/api/sessions/${sessionId}/pieces/${encodeURIComponent(piece)}/snapshot`)
+}
+
 export async function startSession(params: {
   goal: string
   measurementsFilename?: string
   patternFilename?: string
+  focusPiece?: string
   stepLimit?: number
   autorun?: boolean
   model?: string

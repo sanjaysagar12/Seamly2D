@@ -246,6 +246,33 @@
   border-right: 1px solid var(--line);
 }
 
+.piece-switcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.piece-switcher .field-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.piece-switcher select {
+  flex: 0 0 auto;
+  min-width: 180px;
+}
+
+.piece-switcher-busy {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.piece-switcher-error {
+  font-size: 11.5px;
+  color: var(--err);
+}
+
 .snapshot-frame {
   flex: 1;
   background: #ffffff;
@@ -446,6 +473,27 @@
 }
 .step-fail-mark {
   color: var(--err);
+}
+
+.step-ai-response {
+  margin: 6px 0 0;
+}
+
+.step-ai-response summary {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+}
+
+.step-ai-response summary:hover {
+  color: var(--ink-dim);
+}
+
+.step-ai-response[open] summary {
+  margin-bottom: 4px;
 }
 
 .step-thinking {

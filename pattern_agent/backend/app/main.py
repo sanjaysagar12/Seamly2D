@@ -79,12 +79,21 @@ async def upload_measurement(file: UploadFile = File(...)):
 ALLOWED_PATTERN_EXTS = {".val", ".sm2d"}
 
 
+def _is_actiond_autobackup(name: str) -> bool:
+    """actiond (like the Seamly2D GUI itself) writes its own "<name>_<timestamp>
+    (backup)<ext>" copy next to a pattern file the moment it opens it -- this fires
+    for every base-pattern session start *and* every piece-preview call below, right
+    inside PATTERNS_DIR. These are actiond's own internal safety copies, not files a
+    user uploaded, so they must never show up as selectable "base pattern" options."""
+    return "(backup)" in name
+
+
 @app.get("/api/patterns")
 async def list_patterns():
     files = sorted(
         p.name
         for p in config.PATTERNS_DIR.iterdir()
-        if p.is_file() and p.suffix.lower() in ALLOWED_PATTERN_EXTS
+        if p.is_file() and p.suffix.lower() in ALLOWED_PATTERN_EXTS and not _is_actiond_autobackup(p.name)
     )
     return {"files": files}
 
@@ -98,6 +107,20 @@ async def upload_pattern(file: UploadFile = File(...)):
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     return {"filename": dest.name}
+
+
+@app.get("/api/patterns/{filename}/pieces")
+async def list_pattern_file_pieces(filename: str):
+    """Which pieces (Front/Back/Sleeve/...) an uploaded base pattern file already
+    contains -- lets the home page show/select them before a session is even started."""
+    candidate = config.PATTERNS_DIR / Path(filename).name
+    if not candidate.exists():
+        raise HTTPException(404, f"Pattern file not found: {filename}")
+    try:
+        pieces = await manager.list_pattern_pieces(candidate)
+    except Exception as exc:
+        raise HTTPException(400, f"Could not read pieces from {filename}: {exc}") from exc
+    return {"pieces": pieces}
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +151,11 @@ class StartSessionRequest(BaseModel):
     autorun: bool = True
     model: Optional[str] = None
     systemPrompt: Optional[str] = None
+    # Name of a piece already present in patternFilename (see GET .../pieces above) to
+    # start the agent "focused" on -- it gets an automatic close-up snapshot from turn
+    # one, same as any piece the agent later references itself. Optional and independent
+    # of patternFilename: a session can also start with no base pattern and no focus.
+    focusPiece: Optional[str] = None
 
 
 @app.post("/api/sessions")
@@ -155,6 +183,7 @@ async def start_session(req: StartSessionRequest):
             autorun=req.autorun,
             model=req.model,
             system_prompt=req.systemPrompt,
+            focus_piece=req.focusPiece,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -191,7 +220,32 @@ async def get_session(session_id: str):
         "stopReason": agent.stop_reason,
         "finalSummary": agent.final_summary,
         "valUrl": f"/files/{session_id}/final.val" if agent.final_val_path else None,
+        "currentPiece": agent.current_piece,
     }
+
+
+@app.get("/api/sessions/{session_id}/pieces")
+async def list_session_pieces(session_id: str):
+    try:
+        pieces = await manager.list_session_pieces(session_id)
+    except SessionNotFoundError:
+        raise HTTPException(404, "Session not found")
+    except Exception as exc:
+        raise HTTPException(400, f"Could not list pieces: {exc}") from exc
+    return {"pieces": pieces}
+
+
+@app.get("/api/sessions/{session_id}/pieces/{piece}/snapshot")
+async def get_piece_snapshot(session_id: str, piece: str):
+    """Renders (or re-renders) a close-up of one piece on demand -- the session page
+    calls this whenever the user switches which piece they're looking at."""
+    try:
+        result = await manager.render_piece_snapshot(session_id, piece)
+    except SessionNotFoundError:
+        raise HTTPException(404, "Session not found")
+    except Exception as exc:
+        raise HTTPException(400, f"Could not render piece {piece!r}: {exc}") from exc
+    return result
 
 
 class UpdateSessionSettingsRequest(BaseModel):

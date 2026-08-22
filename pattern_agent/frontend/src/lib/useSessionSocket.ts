@@ -10,6 +10,8 @@ interface SocketState {
   valUrl: string | null
   connected: boolean
   chatMessages: ChatMessage[]
+  currentPiece: string | null
+  pieceSnapshots: Record<string, string>
 }
 
 const initialState: SocketState = {
@@ -21,6 +23,8 @@ const initialState: SocketState = {
   valUrl: null,
   connected: false,
   chatMessages: [],
+  currentPiece: null,
+  pieceSnapshots: {},
 }
 
 function stepIndex(steps: StepRecord[], step: number): number {
@@ -79,6 +83,12 @@ function reducer(state: SocketState, action: Action): SocketState {
       return {
         ...state,
         steps: withStep(state.steps, event.step, { snapshotUrl: event.url }),
+      }
+    case 'piece_snapshot_ready':
+      return {
+        ...state,
+        currentPiece: event.piece,
+        pieceSnapshots: { ...state.pieceSnapshots, [event.piece]: event.url },
       }
     case 'step_complete':
       return state // steps already updated incrementally; this event just marks the boundary

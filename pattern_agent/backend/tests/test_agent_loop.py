@@ -233,6 +233,91 @@ async def test_actiond_level_failure_does_not_attach_image_to_error_tool_result(
 
 
 @pytest.mark.asyncio
+async def test_creating_a_piece_switches_current_piece_and_adds_a_closeup_snapshot(tmp_path):
+    """Multi-piece regression: piece.addPatternPiece must set AgentSession.current_piece,
+    and every successful action from then on must carry a *second* image (a target="piece"
+    close-up of that piece, alongside the usual whole-draft snapshot) so the agent can
+    actually see the piece it just created/switched to, not just the draft canvas."""
+    catalog = await load_tool_catalog()
+    output_dir = tmp_path
+    actiond = ActiondSession(output_dir=output_dir)
+    await actiond.start()
+
+    events: list[dict] = []
+
+    async def emit(event):
+        events.append(event)
+
+    agent = AgentSession(
+        session_id="test-session-piece",
+        actiond=actiond,
+        client=None,
+        tools=catalog["anthropic_tools"],
+        op_metadata=catalog["op_metadata"],
+        name_map=catalog["name_map"],
+        output_dir=output_dir,
+        goal="Draft a small triangular piece named Front",
+        emit=emit,
+        step_limit=10,
+    )
+
+    scripted = ScriptedClaude(
+        [
+            _response(_tool_use("basePoint", name="A", x=0, y=0, draftBlock="front")),
+            _response(_tool_use("endLine", name="B", basePoint="A", angle="0", length="50")),
+            _response(_tool_use("endLine", name="C", basePoint="A", angle="90", length="50")),
+            _response(_tool_use(
+                "piece_addPatternPiece", name="Front", nodes=["A", "B", "C"], seamAllowanceWidth="10"
+            )),
+            _response(_tool_use("pattern_complete", summary="Created the Front piece.")),
+        ]
+    )
+    agent._call_claude = scripted  # type: ignore[method-assign]
+
+    assert agent.current_piece is None
+
+    await agent.initialize()
+    keep_going = True
+    turns = 0
+    while keep_going:
+        keep_going = await agent.run_step()
+        turns += 1
+        assert turns <= 10, "loop did not terminate"
+
+    assert agent.status == "complete"
+    assert agent.current_piece == "Front"
+    assert_valid_message_history(agent.messages)
+
+    piece_events = [e for e in events if e["type"] == "piece_snapshot_ready"]
+    assert piece_events, "expected at least one piece_snapshot_ready event once a piece existed"
+    assert all(e["piece"] == "Front" for e in piece_events)
+
+    # Find the tool_result for the piece.addPatternPiece call itself and confirm it
+    # carries two images (draft + piece close-up), not just one.
+    add_piece_tool_use_id = None
+    for message in agent.messages:
+        content = message.get("content")
+        if message.get("role") != "assistant" or isinstance(content, str):
+            continue
+        for block in content:
+            if _block_type(block) == "tool_use" and block.name == "piece_addPatternPiece":
+                add_piece_tool_use_id = block.id
+    assert add_piece_tool_use_id is not None
+
+    result_content = None
+    for message in agent.messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("tool_use_id") == add_piece_tool_use_id:
+                result_content = block["content"]
+    assert isinstance(result_content, list)
+    image_blocks = [b for b in result_content if b["type"] == "image"]
+    assert len(image_blocks) == 2, f"expected draft + piece close-up images, got {len(image_blocks)}"
+
+
+@pytest.mark.asyncio
 async def test_step_limit_stops_the_loop(tmp_path):
     catalog = await load_tool_catalog()
     output_dir = tmp_path

@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import {
   listMeasurements,
   listModels,
+  listPatternPieces,
   listPatterns,
   listSessions,
   startSession,
   uploadMeasurement,
   uploadPattern,
 } from '../lib/api'
-import type { ModelOption, SessionSummary } from '../lib/types'
+import type { ModelOption, PieceInfo, SessionSummary } from '../lib/types'
 import { STOP_REASON_LABELS } from '../lib/types'
 import './StartScreen.css'
 
@@ -37,6 +38,9 @@ export function StartScreen({ onStarted }: Props) {
   const [selected, setSelected] = useState<string>('')
   const [patterns, setPatterns] = useState<string[]>([])
   const [selectedPattern, setSelectedPattern] = useState<string>('')
+  const [patternPieces, setPatternPieces] = useState<PieceInfo[]>([])
+  const [piecesLoading, setPiecesLoading] = useState(false)
+  const [focusPiece, setFocusPiece] = useState<string>('')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [systemPrompt, setSystemPrompt] = useState('')
@@ -66,6 +70,32 @@ export function StartScreen({ onStarted }: Props) {
       .then((files) => setPatterns(files))
       .catch((err) => setError(String(err)))
   }, [])
+
+  useEffect(() => {
+    setFocusPiece('')
+    if (!selectedPattern) {
+      setPatternPieces([])
+      return
+    }
+    let cancelled = false
+    setPiecesLoading(true)
+    listPatternPieces(selectedPattern)
+      .then((pieces) => {
+        if (!cancelled) setPatternPieces(pieces)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPatternPieces([])
+          setError(String(err))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPiecesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedPattern])
 
   useEffect(() => {
     listModels()
@@ -134,6 +164,7 @@ export function StartScreen({ onStarted }: Props) {
         goal: goal.trim(),
         measurementsFilename: selected || undefined,
         patternFilename: selectedPattern || undefined,
+        focusPiece: focusPiece || undefined,
         stepLimit,
         autorun,
         model: selectedModel || undefined,
@@ -215,6 +246,22 @@ export function StartScreen({ onStarted }: Props) {
                 e.target.value = ''
               }}
             />
+            {piecesLoading && <div className="pieces-hint">Reading pieces…</div>}
+            {!piecesLoading && patternPieces.length > 0 && (
+              <div className="pieces-picker">
+                <label className="field-label pieces-picker-label" htmlFor="focus-piece">
+                  Focus piece ({patternPieces.length} found)
+                </label>
+                <select id="focus-piece" value={focusPiece} onChange={(e) => setFocusPiece(e.target.value)}>
+                  <option value="">Whole pattern (no focus)</option>
+                  {patternPieces.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="field-col">

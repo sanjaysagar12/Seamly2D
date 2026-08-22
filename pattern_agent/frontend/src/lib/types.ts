@@ -14,6 +14,7 @@ export type ServerEvent =
       error?: unknown
     }
   | { type: 'snapshot_ready'; sessionId: string; step: number; url: string }
+  | { type: 'piece_snapshot_ready'; sessionId: string; step: number; piece: string; url: string }
   | { type: 'step_complete'; sessionId: string; step: number }
   | {
       type: 'session_complete'
@@ -41,6 +42,13 @@ export interface ChatMessage {
   afterStep: number
 }
 
+export interface PieceInfo {
+  id: number
+  name: string
+  nodeCount: number
+  seamAllowance: boolean
+}
+
 export interface SessionSummary {
   sessionId: string
   status: SessionStatus
@@ -55,6 +63,7 @@ export interface SessionDetail extends SessionSummary {
   finalSummary: string | null
   valUrl: string | null
   systemPrompt: string
+  currentPiece: string | null
 }
 
 export interface ModelOption {

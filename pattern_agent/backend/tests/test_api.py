@@ -151,6 +151,110 @@ async def test_start_session_rejects_unknown_model(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pattern_list_hides_actiond_autobackups(tmp_path, monkeypatch):
+    """actiond writes its own "<name>_<timestamp>(backup).val" copy next to a pattern
+    file the moment anything opens it (a session start, or the piece-preview endpoint
+    below) -- these must never show up as selectable base-pattern options."""
+    from app import config
+
+    monkeypatch.setattr(config, "PATTERNS_DIR", tmp_path)
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.config, "PATTERNS_DIR", tmp_path)
+
+    (tmp_path / "pattern.val").write_text("<pattern/>")
+    (tmp_path / "pattern_22082026-052458(backup).val").write_text("<pattern/>")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/patterns")
+        assert resp.status_code == 200
+        assert resp.json()["files"] == ["pattern.val"]
+
+
+@pytest.mark.asyncio
+async def test_pattern_file_pieces_endpoint(tmp_path, monkeypatch):
+    """The home page's pattern picker calls this to preview which pieces an uploaded
+    base pattern file already contains, before any real session exists."""
+    from app import config
+    from app.actiond_process import ActiondSession
+
+    monkeypatch.setattr(config, "PATTERNS_DIR", tmp_path)
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.config, "PATTERNS_DIR", tmp_path)
+
+    # Build a real pattern file containing one piece via a throwaway actiond session.
+    build_dir = tmp_path / "_build"
+    actiond = ActiondSession(output_dir=build_dir)
+    await actiond.start()
+    await actiond.run_single("basePoint", name="A", x=0, y=0, draftBlock="front")
+    await actiond.run_single("endLine", name="B", basePoint="A", angle="0", length="50")
+    await actiond.run_single("endLine", name="C", basePoint="A", angle="90", length="50")
+    add = await actiond.run_single(
+        "piece.addPatternPiece", name="Front", nodes=["A", "B", "C"], seamAllowanceWidth="10"
+    )
+    assert add["status"] == "ok", add
+    save = await actiond.run_single("session.save", path="pattern.val")
+    assert save["status"] == "ok", save
+    await actiond.close()
+    (tmp_path / "pattern.val").write_bytes((build_dir / "pattern.val").read_bytes())
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/patterns/pattern.val/pieces")
+        assert resp.status_code == 200, resp.text
+        assert [p["name"] for p in resp.json()["pieces"]] == ["Front"]
+
+        resp = await client.get("/api/patterns/does-not-exist.val/pieces")
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_session_pieces_and_piece_snapshot_endpoints(monkeypatch):
+    """The session page's piece switcher: list pieces in the live session, then render
+    an on-demand close-up of one of them. Uses autorun=False and drives actiond
+    directly (bypassing the agent loop) so this needs no live Anthropic credentials."""
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/sessions",
+            json={"goal": "Draft a triangular piece named Front", "autorun": False},
+        )
+        assert resp.status_code == 200, resp.text
+        session_id = resp.json()["sessionId"]
+
+        design_session = manager.get(session_id)
+        actiond = design_session.agent.actiond
+        await actiond.run_single("basePoint", name="A", x=0, y=0, draftBlock="front")
+        await actiond.run_single("endLine", name="B", basePoint="A", angle="0", length="50")
+        await actiond.run_single("endLine", name="C", basePoint="A", angle="90", length="50")
+        add = await actiond.run_single(
+            "piece.addPatternPiece", name="Front", nodes=["A", "B", "C"], seamAllowanceWidth="10"
+        )
+        assert add["status"] == "ok", add
+
+        resp = await client.get(f"/api/sessions/{session_id}/pieces")
+        assert resp.status_code == 200, resp.text
+        assert [p["name"] for p in resp.json()["pieces"]] == ["Front"]
+
+        resp = await client.get(f"/api/sessions/{session_id}/pieces/Front/snapshot")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["piece"] == "Front"
+        assert body["url"] == f"/files/{session_id}/piece_view_Front.png"
+        assert (design_session.agent.output_dir / "piece_view_Front.png").exists()
+
+        resp = await client.get(f"/api/sessions/{session_id}/pieces/NoSuchPiece/snapshot")
+        assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_start_session_honors_requested_model(monkeypatch):
     from app import config
 

@@ -205,6 +205,20 @@ input[type='number'] {
   font-family: inherit;
 }
 
+.pieces-hint {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 8px;
+}
+
+.pieces-picker {
+  margin-top: 12px;
+}
+
+.pieces-picker-label {
+  margin-bottom: 6px;
+}
+
 .link-button {
   background: none;
   border: none;

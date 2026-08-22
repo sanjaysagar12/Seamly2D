@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, seq);
 _MIGRATIONS: list[tuple[str, str]] = [
     ("model", "ALTER TABLE sessions ADD COLUMN model TEXT"),
     ("system_prompt", "ALTER TABLE sessions ADD COLUMN system_prompt TEXT"),
+    ("current_piece", "ALTER TABLE sessions ADD COLUMN current_piece TEXT"),
 ]
 
 _connection: aiosqlite.Connection | None = None
@@ -127,11 +128,11 @@ async def upsert_session(row: dict[str, Any]) -> None:
         INSERT INTO sessions
             (session_id, goal, model, system_prompt, step_limit, status, step, stop_reason,
              final_summary, measurements_path, output_dir, val_path, messages_json, created_at,
-             updated_at)
+             updated_at, current_piece)
         VALUES
             (:session_id, :goal, :model, :system_prompt, :step_limit, :status, :step, :stop_reason,
              :final_summary, :measurements_path, :output_dir, :val_path, :messages_json, :created_at,
-             :updated_at)
+             :updated_at, :current_piece)
         ON CONFLICT(session_id) DO UPDATE SET
             model = excluded.model,
             system_prompt = excluded.system_prompt,
@@ -142,7 +143,8 @@ async def upsert_session(row: dict[str, Any]) -> None:
             final_summary = excluded.final_summary,
             val_path = excluded.val_path,
             messages_json = excluded.messages_json,
-            updated_at = excluded.updated_at
+            updated_at = excluded.updated_at,
+            current_piece = excluded.current_piece
         """,
         row,
     )

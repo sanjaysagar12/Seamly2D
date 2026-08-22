@@ -77,6 +77,15 @@ the actual rendered image, not just from having called "enough" tools -- call \
 successfully; do not just stop calling tools.
 - Work efficiently: prefer the direct construction sequence a human patternmaker would \
 use over unnecessary exploratory or read-only calls.
+- A pattern can contain more than one garment piece (e.g. a Front, a Back, a Sleeve). Build \
+each piece as its own draft block (a fresh `basePoint`/.../`line`/`spline` sequence), then \
+turn its finished boundary into a named piece with `piece.addPatternPiece`. Call `piece.list` \
+first if you want to see which pieces already exist (e.g. when starting from an uploaded \
+base pattern) before adding another -- give every piece a clear, distinct name. Whenever you \
+reference a piece by name (creating it, or calling `piece.dump`/`piece.addAnchorPoint`/\
+`piece.internalPath`/`piece.insertNodes` on it), you'll automatically get a close-up snapshot \
+of that specific piece alongside the overall draft view on your next turn -- use that to judge \
+each piece's own shape, not just the combined draft.
 """
 
 
@@ -99,6 +108,7 @@ class AgentSession:
         step_limit: int = config.DEFAULT_STEP_LIMIT,
         model: str = config.ANTHROPIC_MODEL,
         system_prompt: str | None = None,
+        current_piece: str | None = None,
     ):
         self.session_id = session_id
         self.actiond = actiond
@@ -111,6 +121,12 @@ class AgentSession:
         self.emit = emit
         self.step_limit = step_limit
         self.model = model
+        # The piece the agent (or the user, via the "focus piece" start-session option)
+        # last drew attention to -- see _update_current_piece below. Drives the automatic
+        # close-up render.snapshot(target="piece") appended after every successful action,
+        # so "switching pieces" is just a matter of which piece name shows up in the next
+        # tool call, with no separate "switch" tool needed.
+        self.current_piece = current_piece
         # Instance attribute (not just a reference to the module constant) so
         # session_manager.update_settings() can override it per session at runtime, same as
         # self.model/self.client -- see that method's docstring for why none of the three are
@@ -139,6 +155,9 @@ class AgentSession:
         content: list[dict[str, Any]] = [{"type": "text", "text": goal_text}]
         if initial_image_block is not None:
             content.append(initial_image_block)
+        initial_piece_block = await self._try_render_piece_snapshot("step_0000_piece.png")
+        if initial_piece_block is not None:
+            content.append(initial_piece_block)
         self.messages.append({"role": "user", "content": content})
         self.status = "paused"
         await self.emit(events.status_changed(self.session_id, "paused"))
@@ -157,6 +176,31 @@ class AgentSession:
         image_path = Path(snap["result"]["path"])
         await self.emit(events.snapshot_ready(self.session_id, 0, self._url_for(image_path)))
         return self._image_block(image_path)
+
+    async def _try_render_piece_snapshot(self, snap_name: str) -> dict[str, Any] | None:
+        """Best-effort close-up render of self.current_piece (target="piece"), used
+        alongside the whole-draft snapshot wherever one is taken -- initial state, after
+        every successful action, and when a chat message revives the session. Returns
+        None (silently) whenever there's no current piece, or the render itself fails --
+        this is always a supplement to the draft view, never a hard requirement."""
+        if not self.current_piece:
+            return None
+        try:
+            piece_snap = await self.actiond.run_single(
+                "render.snapshot", path=snap_name, target="piece", piece=self.current_piece,
+                showPointNames=True, width=SNAPSHOT_WIDTH, height=SNAPSHOT_HEIGHT,
+            )
+        except (ActiondCrashError, ActiondTimeoutError) as exc:
+            logger.warning("Could not render piece snapshot for %r: %s", self.current_piece, exc)
+            return None
+        if piece_snap["status"] != "ok":
+            return None
+        piece_image_path = Path(piece_snap["result"]["path"])
+        resolved_piece = piece_snap["result"].get("piece", self.current_piece)
+        await self.emit(
+            events.piece_snapshot_ready(self.session_id, self.step, resolved_piece, self._url_for(piece_image_path))
+        )
+        return self._image_block(piece_image_path)
 
     def _url_for(self, path: Path) -> str:
         return f"/files/{self.session_id}/{path.name}"
@@ -387,6 +431,24 @@ class AgentSession:
                         )
             return await stream.get_final_message()
 
+    # Ops that name a specific piece via a "piece" parameter and represent the agent
+    # paying attention to it (as opposed to piece.list, which lists every piece and
+    # names none in particular, or piece.union, which is excluded from the model's
+    # tool list entirely -- see tool_schema.UNSAFE_OPS).
+    _PIECE_ATTENTION_OPS = {"piece.dump", "piece.addAnchorPoint", "piece.internalPath", "piece.insertNodes"}
+
+    def _update_current_piece(self, op_name: str, tool_input: dict[str, Any], success: bool) -> None:
+        if not success:
+            return
+        if op_name == "piece.addPatternPiece":
+            name = tool_input.get("name")
+            if name:
+                self.current_piece = str(name)
+        elif op_name in self._PIECE_ATTENTION_OPS:
+            piece = tool_input.get("piece")
+            if piece is not None:
+                self.current_piece = str(piece)
+
     async def _execute_tool(self, tool_use) -> dict[str, Any]:
         # tool_use.name is the sanitized name Claude actually called (dots -> "_",
         # since Anthropic tool names must match ^[a-zA-Z0-9_-]{1,128}$ -- see
@@ -427,6 +489,7 @@ class AgentSession:
                 error=None if success else outcome.get("error"),
             )
         )
+        self._update_current_piece(op_name, tool_input, success)
 
         image_block: dict[str, Any] | None = None
         snapshot_note = ""
@@ -447,6 +510,10 @@ class AgentSession:
         except (ActiondCrashError, ActiondTimeoutError) as exc:
             snapshot_note = f" (could not render snapshot after crash recovery: {exc})"
 
+        piece_image_block = (
+            await self._try_render_piece_snapshot(f"step_{self.step:04d}_piece.png") if success else None
+        )
+
         try:
             await self.actiond.run_single("session.save", path="checkpoint.val")
         except (ActiondCrashError, ActiondTimeoutError):
@@ -464,6 +531,8 @@ class AgentSession:
         # not on this one.
         if image_block is not None and success:
             content.append(image_block)
+        if piece_image_block is not None and success:
+            content.append(piece_image_block)
 
         return {
             "type": "tool_result",
@@ -609,6 +678,7 @@ class AgentSession:
                 image_block = self._image_block(image_path)
         except (ActiondCrashError, ActiondTimeoutError) as exc:
             logger.warning("Could not render grounding snapshot before injecting message: %s", exc)
+        piece_image_block = await self._try_render_piece_snapshot(f"resume_{self._message_count:03d}_piece.png")
 
         content: list[dict[str, Any]] = [
             {
@@ -622,6 +692,8 @@ class AgentSession:
         ]
         if image_block is not None:
             content.append(image_block)
+        if piece_image_block is not None:
+            content.append(piece_image_block)
         self.messages.append({"role": "user", "content": content})
 
         self.step_limit += config.EXTRA_STEPS_PER_MESSAGE

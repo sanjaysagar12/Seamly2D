@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import shutil
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +16,12 @@ import anthropic
 
 from . import config, db
 from .actiond_process import ActiondSession
+from .agent_loop import SNAPSHOT_HEIGHT, SNAPSHOT_WIDTH
 from .agent_loop import SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT
 from .agent_loop import AgentSession
 from .tool_schema import load_tool_catalog
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
 
 logger = logging.getLogger("pattern_agent.session_manager")
 
@@ -75,6 +81,7 @@ class DesignSession:
             "messages_json": db.serialize_messages(agent.messages),
             "created_at": self.created_at,
             "updated_at": _now(),
+            "current_piece": agent.current_piece,
         }
 
 
@@ -157,6 +164,7 @@ class SessionManager:
         autorun: bool = True,
         model: str | None = None,
         system_prompt: str | None = None,
+        focus_piece: str | None = None,
     ) -> DesignSession:
         if model is not None and model not in config.SELECTABLE_MODELS:
             raise ValueError(
@@ -191,6 +199,7 @@ class SessionManager:
             step_limit=step_limit,
             model=resolved_model,
             system_prompt=system_prompt,
+            current_piece=focus_piece,
         )
 
         design_session = DesignSession(session_id, agent, created_at=_now())
@@ -204,6 +213,59 @@ class SessionManager:
             design_session.run_task = asyncio.create_task(self._run_loop(design_session))
 
         return design_session
+
+    async def list_pattern_pieces(self, pattern_path: Path) -> list[dict[str, Any]]:
+        """Briefly loads a base pattern file into its own throwaway actiond process just
+        to run piece.list -- lets the home page's pattern picker show which pieces (e.g.
+        Front/Back/Sleeve) an uploaded .val/.sm2d already contains before any real
+        session exists. Never touches self._sessions."""
+        tmp_dir = Path(tempfile.mkdtemp(prefix="piece_preview_", dir=str(config.DATA_DIR)))
+        actiond = ActiondSession(output_dir=tmp_dir, pattern_path=pattern_path)
+        try:
+            await actiond.start()
+            outcome = await actiond.run_single("piece.list")
+            if outcome["status"] != "ok":
+                raise ValueError(outcome.get("error") or "piece.list failed")
+            return outcome["result"]["pieces"]
+        finally:
+            try:
+                await actiond.close(graceful_timeout=2.0)
+            except Exception:
+                pass
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    async def list_session_pieces(self, session_id: str) -> list[dict[str, Any]]:
+        """Pieces that currently exist in a live (or revivable) session -- backs the
+        session page's piece switcher."""
+        agent = self.get(session_id).agent
+        await agent._ensure_actiond_alive()
+        outcome = await agent.actiond.run_single("piece.list")
+        if outcome["status"] != "ok":
+            raise ValueError(outcome.get("error") or "piece.list failed")
+        return outcome["result"]["pieces"]
+
+    async def render_piece_snapshot(self, session_id: str, piece: str) -> dict[str, Any]:
+        """Renders a fresh, on-demand close-up of one piece -- used when the user
+        switches which piece they're looking at in the session page, independent of
+        whatever the agent loop's own automatic snapshots are doing."""
+        agent = self.get(session_id).agent
+        await agent._ensure_actiond_alive()
+
+        # Path params always arrive as strings; actiond only treats a *JSON number* as a
+        # literal piece id (a JSON string is always matched by name) -- so a purely
+        # numeric piece name still round-trips correctly (matched by id, same as typing
+        # it in a raw request), while a name like "Front" is matched by name as usual.
+        piece_param: str | int = int(piece) if piece.isdigit() else piece
+        safe = _UNSAFE_FILENAME_CHARS.sub("_", piece)[:80] or "piece"
+        filename = f"piece_view_{safe}.png"
+        outcome = await agent.actiond.run_single(
+            "render.snapshot", path=filename, target="piece", piece=piece_param,
+            showPointNames=True, width=SNAPSHOT_WIDTH, height=SNAPSHOT_HEIGHT,
+        )
+        if outcome["status"] != "ok":
+            raise ValueError(outcome.get("error") or "render.snapshot failed")
+        resolved_piece = outcome["result"].get("piece", piece)
+        return {"piece": resolved_piece, "url": f"/files/{session_id}/{filename}"}
 
     async def load_from_db(self) -> None:
         """Reconstructs every persisted session on backend startup -- metadata, the
@@ -243,6 +305,7 @@ class SessionManager:
                 step_limit=row["step_limit"],
                 model=row["model"] or config.ANTHROPIC_MODEL,
                 system_prompt=row["system_prompt"],
+                current_piece=row.get("current_piece"),
             )
             agent.messages = db.deserialize_messages(row["messages_json"])
             agent.step = row["step"]

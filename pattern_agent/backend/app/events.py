@@ -43,6 +43,10 @@ def snapshot_ready(session_id: str, step: int, url: str) -> dict[str, Any]:
     return _event("snapshot_ready", session_id, step=step, url=url)
 
 
+def piece_snapshot_ready(session_id: str, step: int, piece: str, url: str) -> dict[str, Any]:
+    return _event("piece_snapshot_ready", session_id, step=step, piece=piece, url=url)
+
+
 def step_complete(session_id: str, step: int) -> dict[str, Any]:
     return _event("step_complete", session_id, step=step)
 
