@@ -172,6 +172,7 @@ Which shape a given failure uses is a property of *where* the check lives, not o
   | `unsupported`               | `point.edit` naming a field that doesn't apply to the point's actual tool type | — |
   | `toolNotFound`              | `point.edit` naming a point with no registered tool (e.g. an operation-created destination point from `move`/`rotation`/`mirrorByLine`/`mirrorByAxis`) | — |
   | `invalidPiecePath`          | `piece.addPatternPiece`'s `"nodes"` not forming a closed, non-self-intersecting polygon | `nodes` (the echoed node-name array) |
+  | `crossDraftBlockReference`  | `piece.addPatternPiece`/`piece.internalPath`/`piece.insertNodes`/`piece.addAnchorPoint` referencing a point (via `"nodes"` or `"point"`) that was created in a *different* draft block than the pattern's currently active one — see [Pieces](#pieces)'s own note on why this is checked at all | `offendingNodes` (the echoed name(s) that didn't match), `expectedDraftBlock` (the currently active one), `foundDraftBlock` (the mismatching one actually found) |
   | `unknownPiece`               | `piece.addAnchorPoint`/`piece.internalPath`/`piece.insertNodes`/`piece.union`/`piece.dump`/`render.snapshot` (`target: "piece"`) naming a piece that doesn't exist | `piece` |
   | `groupExists`                | `group` naming a group that already exists                            | `name` |
   | `missingMeasurements`       | `measurements.load`/`.sync`/`.recompute` against a file missing a measurement the pattern requires | `missing` (array of names) |
@@ -1360,6 +1361,36 @@ second, independent safety net). `piece.insertNodes` is the one op in this file 
 need this cloning step, since `PatternPieceTool::insertNodes()` calls `PrepareNode()` itself
 internally.
 
+**Cross-draft-block reference validation (found and fixed, 22 Aug 2026):** every point
+`piece.addPatternPiece`/`piece.internalPath`/`piece.insertNodes` reference via `"nodes"`, and the
+one `piece.addAnchorPoint` references via `"point"`, must belong to the pattern's **currently
+active draft block** (`VAbstractPattern::getActiveDraftBlockName()`) — a referenced point from a
+*different*, earlier draft block is rejected with a structured `crossDraftBlockReference` error
+(see the error-type table above) rather than silently succeeding. **Do not "fix" this validation
+away as overly strict** — it exists because `VPattern::parseDraftBlockElement()`
+(`src/app/seamly2d/xml/vpattern.cpp`) unconditionally wipes *every* previously-parsed draft
+block's calculation-scope objects (`VContainer::ClearCalculationGObjects()`) each time a later
+draft block's own `<calculation>` section is (re)parsed — correct, intentional, shared behavior
+(draft blocks are self-contained calculation scopes, never meant to interlink; see [`basePoint`](#basepoint)'s
+own entry above on why it always starts a brand-new block). A piece/anchor referencing a point
+from a different block succeeds silently in a live session (`VContainer` is only wiped during file
+*parsing*, never mid-session) but corrupts the saved file: on reload, whichever draft block parses
+*last* wipes every earlier block's points first, so that earlier block's own `<modeling>` clone
+fails to resolve its source point and is silently dropped (`VPattern::ParseNodePoint()` catches
+`VExceptionBadId` and returns) — leaving the piece's later reference to that clone to fail instead,
+with an error like `ExceptionBadId: Can't find tool in table., id = N`. This check runs, and every
+affected handler was restructured to run it, **before** any DOM element or modeling clone is
+created, so a rejected action never leaves a dangling, unreferenced clone behind.
+
+**Known gap in this check:** an operation-created destination point (`move`/`rotation`/
+`mirrorByLine`/`mirrorByAxis`) has no individual entry in `doc->getHistory()` of its own — only
+the *operation* tool's own id does — so such a point's own draft block cannot be determined this
+way, and the check silently treats it as unverifiable rather than a violation. A cross-draft-block
+reference through an operation's result specifically would not be caught. `piece.union` was
+checked and confirmed **not** exposed to this failure class at all: it references only two
+already-existing, already-self-contained pieces by name, never a raw calculation-scope point, so
+there is no new clone for a draft-block mismatch to corrupt.
+
 ### `piece.list`
 
 **Maps to:** no `Create()` call — reads `VContainer::DataPieces()` directly.
@@ -1459,22 +1490,36 @@ resolve to any known piece.
 | `seamAllowance` | bool | no (default `true`) | literal | Toggles `VAbstractPiece::hasSeamAllowance()` — a separate flag from the width formula itself, matching the interactive dialog's own "type a width" + "check the Seams checkbox" split. Since `seamAllowanceWidth` is required, supplying it always implies seam allowance should be enabled; `seamAllowance: false` lets a caller override that while still recording a width formula for later use. |
 | `fill` | string | no (default `FillNone`) | — | A raw default-constructed `VPiece` fill value is not one of `VAbstractTool::fills()`'s recognized values and crashes `PatternPieceTool::RefreshGeometry()`'s `QBrush` construction (reproduced and root-caused) — this default exists specifically to avoid that, mirroring the interactive dialog's own always-seeded fallback. |
 | `pieceColor` | string | no | — | Only set if given at all (no default applied). |
+| `mx` / `my` | number | no | literal | Position offset (scene units) — `PatternPieceTool::RefreshGeometry()` applies `setPos(piece.GetMx(), piece.GetMy())` on top of the piece's own node-derived local shape (`pattern_piece_tool.cpp:1586`). **Bug fix, not a new feature:** `PatternPieceTool::Create()` never assigns a piece a position beyond `VPiece`'s default-constructed `(0,0)` — the same way the interactive GUI leaves a human to drag each new piece to a clear spot afterward — so every piece built with no explicit `mx`/`my` used to land at the exact same position, overlapping every other piece built the same way (reproduced directly: two pieces from two independently-drafted, coordinate-overlapping draft blocks rendered completely on top of each other). Giving **either** `mx` **or** `my` (even just one) is always taken exactly as given (the other defaulting to `0`) with **no auto-placement involved at all** — never adjusted. Omitting **both** auto-places the piece clear of every other piece this session has already assembled, via a session-lifetime `PieceLayoutCursor` (a simple non-overlapping left-to-right "shelf" layout — explicitly *not* a real cutting-layout/bin-packing optimization, out of scope the same way `export.scene`'s own "Phase B" note already flags that as separate, larger work). The response always echoes back the position actually used (`"mx"`/`"my"`), whichever path produced it. |
+| `createGroup` | bool | no (default `false`) | literal | **Optional convenience, not a bug fix** — the interactive GUI's own `PatternPieceTool::Create()` creates no group either, so leaving this `false` is not "missing" previously-automatic behavior. When `true`, also creates a group (via `handleGroup()`, reused directly rather than reimplemented) containing this piece's own *original* node points (e.g. `"A"`/`"B"`/`"C"`/`"D"`) — not the piece's internal `"__pieceNode_<id>"`-named clones, which are never meant to be independently selected. A group-name collision (or any other `handleGroup()` failure) is reported via the response's `"groupError"` field rather than failing this whole action, since the piece itself has already been created successfully by that point. |
+| `groupName` | string | no | — | Name for the group `createGroup` creates; defaults to this piece's own `"name"` if omitted. Ignored when `createGroup` is false/omitted. |
 
 **Example request:**
 ```json
-{ "op": "piece.addPatternPiece", "name": "Square", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10" }
+{ "op": "piece.addPatternPiece", "name": "Square", "nodes": ["A", "B", "C", "D"],
+  "seamAllowanceWidth": "10", "mx": 0, "my": 250, "createGroup": true }
 ```
 
 **Example success response:**
 ```json
-{ "id": 37, "name": "Square", "op": "piece.addPatternPiece" }
+{ "id": 37, "name": "Square", "mx": 0, "my": 250, "op": "piece.addPatternPiece",
+  "group": { "id": 38, "name": "Square", "sourceObjects": ["A", "B", "C", "D"], "op": "group" } }
 ```
+`"group"` is only present when `createGroup` was `true` and group creation succeeded;
+`"groupError"` (a structured or plain error, matching `handleGroup()`'s own shape) is present
+instead if `createGroup` was `true` but group creation failed. Neither field is present when
+`createGroup` was omitted/`false` — the response shape is then byte-identical to before this
+option existed.
 
 **Known error cases:** plain strings for missing `name`/`<3` nodes/missing `seamAllowanceWidth`,
 or a resolved node that isn't a point; structured `nameResolution`; structured `invalidPiecePath`
 (**new in this refresh — was missing from the error-type table**, `{"type","message","nodes"}`) if
 the nodes don't form a simple closed polygon; structured `formulaError` for a bad
-`seamAllowanceWidth`.
+`seamAllowanceWidth`; structured `crossDraftBlockReference` (see [Pieces](#pieces)'s own note
+above) if any node belongs to a different draft block than the currently active one — checked
+before `nodes` gets cloned into any modeling clone, so a rejection never leaves one dangling. A
+`createGroup: true` group-creation failure does **not** fail this action — see `"groupError"`
+above.
 
 ### `piece.addAnchorPoint`
 
@@ -1500,8 +1545,10 @@ Note `"id"` here is the **point's own id**, not a new tool id — `AnchorPointTo
 existing point as a label anchor rather than creating anything new.
 
 **Known error cases:** plain strings for missing `point`/`piece` or a non-point `point`; structured
-`nameResolution`; structured `unknownPiece` (`{"type","message","piece"}`) if `piece` doesn't
-resolve via `resolvePieceId()`.
+`nameResolution`; structured `crossDraftBlockReference` (see [Pieces](#pieces)'s own note above) if
+`point` belongs to a different draft block than the currently active one — checked before
+`AnchorPointTool::Create()`'s own internal clone is created; structured `unknownPiece`
+(`{"type","message","piece"}`) if `piece` doesn't resolve via `resolvePieceId()`.
 
 ### `piece.internalPath`
 
@@ -1527,7 +1574,8 @@ No `lineType` field, despite the header comment listing one — see [Findings](#
 ```
 
 **Known error cases:** plain strings for missing `piece`/`<2` nodes/a non-point node; structured
-`nameResolution`; structured `unknownPiece`.
+`nameResolution`; structured `crossDraftBlockReference` (see [Pieces](#pieces)'s own note above);
+structured `unknownPiece`.
 
 ### `piece.insertNodes`
 
@@ -1554,7 +1602,8 @@ object id to report back.
 No `"id"` field at all — matches the "no new object id" note above.
 
 **Known error cases:** plain strings for missing `piece`/empty `nodes`/a non-point node; structured
-`nameResolution`; structured `unknownPiece`.
+`nameResolution`; structured `crossDraftBlockReference` (see [Pieces](#pieces)'s own note above);
+structured `unknownPiece`.
 
 **KNOWN GAP (unchanged since it was first documented):** unlike every `Create()`-based op in this
 action layer, `insertNodes()` internally pushes a `SavePieceOptions` `QUndoCommand`
@@ -1587,7 +1636,9 @@ practice, see below):**
 ```
 
 **Known error cases:** plain strings for missing fields; structured `nameResolution`; structured
-`unknownPiece` for either piece name.
+`unknownPiece` for either piece name. **Not** subject to the `crossDraftBlockReference` check
+(see [Pieces](#pieces)'s own note) — confirmed this op never references a raw calculation-scope
+point at all, only two already-existing, already-self-contained pieces by name.
 
 **KNOWN GAP — DO NOT RELY ON THIS OP YET (unchanged since it was first documented):**
 reproducibly **segfaults** inside `UnionTool::Create()` → `unitePieces()` →

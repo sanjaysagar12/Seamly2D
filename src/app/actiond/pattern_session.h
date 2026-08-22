@@ -25,9 +25,10 @@
 #ifndef PATTERN_SESSION_H // Include guard start, prevents this header being processed twice in one translation unit.
 #define PATTERN_SESSION_H // Marks PATTERN_SESSION_H as defined for the remainder of the include guard.
 
-#include "../../libs/actionlayer/action_context.h"  // Provides ActionContext, returned by context() below.
-#include "../../libs/actionlayer/action_registry.h" // Provides ActionRegistry, owned so every built-in handler is available.
-#include "../../libs/actionlayer/action_engine.h"   // Provides ActionEngine, owned to dispatch runActions()'s script.
+#include "../../libs/actionlayer/action_context.h"      // Provides ActionContext, returned by context() below.
+#include "../../libs/actionlayer/action_registry.h"     // Provides ActionRegistry, owned so every built-in handler is available.
+#include "../../libs/actionlayer/action_engine.h"       // Provides ActionEngine, owned to dispatch runActions()'s script.
+#include "../../libs/actionlayer/piece_layout_cursor.h" // Provides PieceLayoutCursor, owned so piece.addPatternPiece's auto-placement accumulates across this whole session -- a value member (not a pointer), so the full definition (not just a forward declaration) is required here.
 
 #include <QJsonDocument>  // Provides QJsonDocument, both runActions()'s parameter and return type.
 #include <QScopedPointer> // Provides QScopedPointer, used to own the VPattern document.
@@ -114,7 +115,8 @@ private:
 
     ActionRegistry m_registry; // Owned; auto-registers every built-in action handler.
     ActionEngine m_engine;     // Owned; dispatches runActions()'s script through m_registry.
-    ActionContext m_context;   // Owned; bundles m_draftScene/m_doc/m_data/m_pieceScene for handlers.
+    PieceLayoutCursor m_pieceLayoutCursor; // Owned; must be declared (and so constructed) before m_context below, whose constructor takes this member's address -- C++ initializes members in declaration order, not initializer-list order.
+    ActionContext m_context;   // Owned; bundles m_draftScene/m_doc/m_data/m_pieceScene/&m_pieceLayoutCursor for handlers.
 };
 
 #endif // PATTERN_SESSION_H // End of include guard started above.

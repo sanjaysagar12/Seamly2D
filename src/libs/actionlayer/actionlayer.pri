@@ -31,6 +31,7 @@ SOURCES += \
 
 HEADERS += \
     $$PWD/action_context.h \
+    $$PWD/piece_layout_cursor.h \
     $$PWD/action_registry.h \
     $$PWD/action_engine.h \
     $$PWD/action_result.h \

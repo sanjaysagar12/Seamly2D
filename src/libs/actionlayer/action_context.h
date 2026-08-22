@@ -28,6 +28,7 @@
 class VMainGraphicsScene; // Forward declaration avoids pulling in the full vwidgets scene header here.
 class VAbstractPattern;   // Forward declaration avoids pulling in the full ifc document header here.
 class VContainer;         // Forward declaration avoids pulling in the full vpatterndb container header here.
+class PieceLayoutCursor;  // Forward declaration avoids pulling in piece_layout_cursor.h here; only piece_handlers.cpp calls methods on it.
 
 // ActionContext bundles the scene, document, and data container an action needs to read or mutate the pattern.
 class ActionContext
@@ -39,12 +40,20 @@ public:
     // three positional args) keeps compiling unchanged -- piece_handlers.cpp's ops are the first
     // ones that need a second (piece-mode) scene distinct from ctx.scene()'s draft-mode one,
     // mirroring MainWindow's own separate draftScene/pieceScene split.
+    // 22 Aug 2026: pieceLayoutCursor defaults to nullptr for the same reason -- every pre-existing
+    // call site keeps compiling and behaving unchanged (piece.addPatternPiece falls back to (0,0)
+    // -- today's exact existing behavior -- when no cursor is available, e.g. a raw
+    // ActionLayerTest fixture built with no PatternSession behind it). PatternSession is the one
+    // real owner: it holds one PieceLayoutCursor for its whole session lifetime and passes its
+    // address here, so pieces auto-placed across an entire script (or, in daemon mode, an entire
+    // session's worth of requests) accumulate into the same non-overlapping layout.
     ActionContext(VMainGraphicsScene *scene, VAbstractPattern *doc, VContainer *data,
-                  VMainGraphicsScene *pieceScene = nullptr)
-        : m_scene(scene),         // Initialize the scene pointer member from the constructor argument.
-          m_doc(doc),             // Initialize the document pointer member from the constructor argument.
-          m_data(data),           // Initialize the data container pointer member from the constructor argument.
-          m_pieceScene(pieceScene) // Initialize the piece-scene pointer member from the constructor argument.
+                  VMainGraphicsScene *pieceScene = nullptr, PieceLayoutCursor *pieceLayoutCursor = nullptr)
+        : m_scene(scene),                     // Initialize the scene pointer member from the constructor argument.
+          m_doc(doc),                         // Initialize the document pointer member from the constructor argument.
+          m_data(data),                       // Initialize the data container pointer member from the constructor argument.
+          m_pieceScene(pieceScene),           // Initialize the piece-scene pointer member from the constructor argument.
+          m_pieceLayoutCursor(pieceLayoutCursor) // Initialize the piece-layout-cursor pointer member from the constructor argument.
     {
     }
 
@@ -62,11 +71,17 @@ public:
     // nullptr for a context built before Phase 8 or by a test that never exercises a piece op.
     VMainGraphicsScene *pieceScene() const { return m_pieceScene; } // Returns the stored piece-scene pointer unchanged.
 
+    // Getter returning the session-lifetime piece-placement cursor (see PieceLayoutCursor's own
+    // header comment). May be nullptr for a context with no session behind it (e.g. a raw
+    // ActionLayerTest fixture) -- callers must handle that case rather than assume it is always set.
+    PieceLayoutCursor *pieceLayoutCursor() const { return m_pieceLayoutCursor; } // Returns the stored piece-layout-cursor pointer unchanged.
+
 private:
-    VMainGraphicsScene *m_scene;      // Raw, non-owning pointer to the draft-mode graphics scene supplied at construction.
-    VAbstractPattern   *m_doc;        // Raw, non-owning pointer to the pattern document supplied at construction.
-    VContainer         *m_data;       // Raw, non-owning pointer to the variable container supplied at construction.
-    VMainGraphicsScene *m_pieceScene; // Raw, non-owning pointer to the piece-mode graphics scene supplied at construction.
+    VMainGraphicsScene *m_scene;             // Raw, non-owning pointer to the draft-mode graphics scene supplied at construction.
+    VAbstractPattern   *m_doc;               // Raw, non-owning pointer to the pattern document supplied at construction.
+    VContainer         *m_data;              // Raw, non-owning pointer to the variable container supplied at construction.
+    VMainGraphicsScene *m_pieceScene;        // Raw, non-owning pointer to the piece-mode graphics scene supplied at construction.
+    PieceLayoutCursor  *m_pieceLayoutCursor; // Raw, non-owning pointer to the session's piece-placement cursor supplied at construction.
 };
 
 #endif // ACTION_CONTEXT_H // End of include guard started above.

@@ -1,0 +1,28 @@
+{
+    "_description": "Negative regression test for the cross-draft-block validation (see piece_handlers.h's own \"FOUND AND FIXED -- cross-draft-block dangling reference\" module comment for the full root-cause writeup). Reproduces the exact originally-reported failure scenario: \"SquareBlock\" is built first, then \"RectangleBlock\" becomes the pattern's active draft block, then piece.addPatternPiece/piece.internalPath/piece.addAnchorPoint are each called referencing SquareBlock's own (no longer active) points -- each must now fail immediately with a structured \"crossDraftBlockReference\" error instead of silently succeeding and corrupting the saved file on reload. \"GoodRectangle\" (built entirely from RectangleBlock's own points, the currently active block) proves the same three ops still succeed normally for a legitimate same-block reference. The trailing piece.list showing exactly one piece (only \"GoodRectangle\") confirms none of the three failed calls left a dangling/orphaned piece, internal path, or anchor-point modeling clone behind.",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "SquareBlock" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "C", "basePoint": "B", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "D", "basePoint": "A", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "line", "firstPoint": "B", "secondPoint": "C" },
+        { "op": "line", "firstPoint": "C", "secondPoint": "D" },
+        { "op": "line", "firstPoint": "D", "secondPoint": "A" },
+
+        { "op": "basePoint", "name": "E", "x": 0, "y": 0, "draftBlock": "RectangleBlock" },
+        { "op": "endLine", "name": "F", "basePoint": "E", "length": "150", "angle": "0" },
+        { "op": "endLine", "name": "G", "basePoint": "F", "length": "80", "angle": "90" },
+        { "op": "endLine", "name": "H", "basePoint": "E", "length": "80", "angle": "90" },
+        { "op": "line", "firstPoint": "E", "secondPoint": "F" },
+        { "op": "line", "firstPoint": "F", "secondPoint": "G" },
+        { "op": "line", "firstPoint": "G", "secondPoint": "H" },
+        { "op": "line", "firstPoint": "H", "secondPoint": "E" },
+
+        { "op": "piece.addPatternPiece", "name": "BadSquare", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10" },
+        { "op": "piece.addPatternPiece", "name": "GoodRectangle", "nodes": ["E", "F", "G", "H"], "seamAllowanceWidth": "10" },
+        { "op": "piece.internalPath", "piece": "GoodRectangle", "nodes": ["A", "C"] },
+        { "op": "piece.addAnchorPoint", "point": "A", "piece": "GoodRectangle" },
+        { "op": "piece.list" }
+    ]
+}

@@ -165,6 +165,8 @@
             "op": "piece.addPatternPiece",
             "value": {
                 "id": 21,
+                "mx": 0,
+                "my": 377.9527559055118,
                 "name": "SquareOne",
                 "op": "piece.addPatternPiece"
             }
@@ -175,6 +177,8 @@
             "op": "piece.addPatternPiece",
             "value": {
                 "id": 26,
+                "mx": -1113.8582677165355,
+                "my": 377.9527559055118,
                 "name": "SquareTwo",
                 "op": "piece.addPatternPiece"
             }
@@ -326,7 +330,7 @@
                     "height": 133.25618451236897,
                     "width": 133.256184512369,
                     "x": 122.34828569657142,
-                    "y": -255.6044702089404
+                    "y": 122.34828569657142
                 },
                 "highlighted": [
                 ],
@@ -350,8 +354,8 @@
                 "boundingBox": {
                     "height": 133.256184512369,
                     "width": 133.25618451236915,
-                    "x": 1634.1593093186186,
-                    "y": -255.60447020894043
+                    "x": 520.3010416020832,
+                    "y": 122.3482856965714
                 },
                 "highlighted": [
                 ],

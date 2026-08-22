@@ -8,6 +8,207 @@ See also [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the standal
 decision and [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md) for the
 full op reference.
 
+## Phase 15 — Cross-draft-block dangling reference (bug fix)
+
+- **Root cause, traced to `VPattern::parseDraftBlockElement()`
+  (`src/app/seamly2d/xml/vpattern.cpp`):**
+
+  ```cpp
+  case 0: // TagCalculation
+      data->ClearCalculationGObjects();   // wipes every calculation-scope object from every
+                                           // previously-parsed draft block, unconditionally
+      ParseDraftStage(domElement, parse, Draw::Calculation);
+  ```
+
+  Every `<draftBlock>`'s own `<calculation>` section, when (re)parsed, wipes all calculation-scope
+  points/lines/curves loaded from every *other* draft block already parsed so far — confirmed
+  directly in `VContainer::ClearCalculationGObjects()`, which unconditionally clears every object
+  with `getMode() == Draw::Calculation` regardless of which draft block it came from. **This is
+  correct, intentional, load-bearing behavior, not touched by this fix:** draft blocks are
+  self-contained calculation scopes, never meant to interlink — the same invariant `basePoint`'s own
+  handler comment already documents (`VToolBasePoint::AddToFile()` unconditionally starts a
+  brand-new block, with no merge-into-existing-block logic).
+- **The bug:** nothing in `piece_handlers.cpp` previously checked that a `"nodes"`/`"point"`
+  argument's resolved id was created in the *same* draft block as the pattern's own
+  currently-active one (`VAbstractPattern::getActiveDraftBlockName()`). Referencing a point from a
+  *different*, earlier draft block succeeded silently in the live session — `VContainer` is only
+  ever wiped during file *parsing*, never mid-session — producing a piece/anchor whose modeling
+  clone referenced an `idObject` belonging to a different block. **Reproduced directly, not
+  assumed:** built `"SquareBlock"` first, then `"RectangleBlock"` (making it the active block),
+  then called `piece.addPatternPiece` referencing `"SquareBlock"`'s own points — this used to
+  succeed with no error. On reload, `"RectangleBlock"`'s own `<calculation>` section (parsed after
+  `"SquareBlock"`'s) wipes `"SquareBlock"`'s points first, so its own `<modeling>` clone's lookup
+  throws `VExceptionBadId`, caught and **silently skipped** by `VPattern::ParseNodePoint()`
+  (`"Possible case. Parent was deleted, but the node object is still here."` — a legitimate case for
+  an actually-deleted parent, but a false positive here) — leaving the piece's later reference to
+  that never-created clone to fail with exactly the originally-reported
+  `ExceptionBadId: Can't find tool in table., id = N`. Same failure class as the earlier `SetMPath`
+  measurement-path bug: works fine live, invisible to any in-process check, corrupts only on reload.
+- **Fix:** a new `checkSameDraftBlock()` helper (`piece_handlers.cpp`), backed by a new
+  `draftBlockForObjectId()` helper that traces an object id's own draft block via a
+  `doc->getHistory()` scan (`VToolRecord::getDraftBlockName()` — the same field
+  `VAbstractTool::AddRecord()` already stamps every tool's history entry with, using whatever
+  `getActiveDraftBlockName()` was at *that* tool's own creation time — no new tracking mechanism
+  invented). Wired into `resolvePointNodes()`/`resolvePreparedPointNodes()` (the two shared
+  `"nodes"`-array resolvers behind `piece.addPatternPiece`/`piece.internalPath`/
+  `piece.insertNodes`) and inline into `handlePieceAddAnchorPoint()` (a single `"point"`, not a
+  `"nodes"` array) — every handler that builds a piece-scoped DOM structure from an
+  externally-named point was audited, not just the one that happened to be reproduced. A mismatch
+  is rejected with a structured `{"type":"crossDraftBlockReference","message","offendingNodes",
+  "expectedDraftBlock","foundDraftBlock"}` error.
+- **Atomicity fix, found while implementing the check above:** `resolvePreparedPointNodes()`
+  previously resolved a name and immediately cloned it, one name at a time, in a single loop — so a
+  validation failure partway through (the polygon-closure check, or now this new cross-draft-block
+  check) would have already left every already-processed name's modeling clone dangling in
+  `VContainer`, unreferenced by anything, with no cleanup. Restructured into three explicit phases
+  (resolve every name → validate the whole set → only then clone each one) so *any* failure —
+  including every pre-existing failure mode, not just the new one — now leaves zero dangling clones
+  behind. Confirmed directly: the saved `.val` from the negative regression test below contains
+  exactly one `<piece>` and exactly the four `<modeling>` clones the one legitimate piece actually
+  needed, nothing from any of the three rejected calls.
+- **Known, tracked gap left by this fix (not silently discovered later):** an operation-created
+  destination point (`move`/`rotation`/`mirrorByLine`/`mirrorByAxis`) has no individual
+  `doc->getHistory()` entry of its own — only the *operation* tool's own id does (confirmed by
+  reading each of those four tools' own `AddRecord()` call). Such a point's own draft block cannot
+  be determined this way, so `checkSameDraftBlock()` treats it as unverifiable rather than a
+  violation, instead of either false-blocking a legitimate reference or attempting a more complex
+  reverse trace back to the owning operation tool. A cross-draft-block reference through an
+  operation's result specifically would not be caught by this fix.
+- **`piece.union` audited and confirmed unaffected:** it references only two already-existing
+  pieces by name/id, each already fully self-contained with its own previously-validated modeling
+  clones — uniting them creates no new clone referencing a calculation-scope point, so there is
+  nothing here for a draft-block mismatch to corrupt. (Its own separate, pre-existing, already-
+  documented segfault gap is untouched by this fix either way.)
+- New `tests/actionlayer/scripts/13_cross_draft_block_error.json` (negative): reproduces the exact
+  original scenario against all three affected "nodes"/"point"-taking ops
+  (`piece.addPatternPiece`, `piece.internalPath`, `piece.addAnchorPoint`), confirms each now fails
+  immediately with the structured error, and confirms — via a trailing `piece.list` showing exactly
+  one piece — that none of the three failed calls left a dangling piece, internal path, or
+  anchor-point clone behind.
+- New `checkSharedDraftBlockMultiPieceRegression()` in `run_batch/main.cpp` (positive, bespoke —
+  same "needs a genuinely fresh process, not just a scripts/*.json diff against output from the
+  same process that built the pattern" reasoning as `checkMeasurementsPathRegression()`, since this
+  specific bug class is invisible to any in-process check by definition): builds two pieces sharing
+  construction points within **one** shared draft block (mirroring Aldrich's own real file
+  structure, Phase 13's fixture — never a second `basePoint` call), saves, then reloads the saved
+  file into a **second, genuinely separate `actiond` process** and confirms both pieces survive
+  with a real `piece.list`. **Also verified directly against the real, unmodified `seamly2d.exe`
+  GUI binary** (`--test <path>`, exit code 0 = clean load — the exact same `VPattern::Parse()` path
+  `MainWindow::LoadPattern()` uses): the saved file from this check opens with no parse error,
+  which is the test that actually matters, since an `actiond`-only check would not have caught the
+  original bug either (the fixture files needed no rebuild for this — `seamly2d.exe` never links
+  the action layer at all, so its baseline binary already reflects the correct, pre-existing, real
+  GUI parsing behavior this fix's *saved output* now has to satisfy).
+- `12_piece_placement_and_grouping.json` (Phase 14) needed restructuring alongside this fix: its
+  four pieces were originally all built *after* all four of their independent draft blocks, so by
+  the time each `piece.addPatternPiece` ran, only the *last* block was active — an accidental,
+  unnoticed instance of the exact bug this phase fixes, caught by this phase's own new validation
+  rejecting that test's own golden run. Fixed by interleaving: build one draft block, immediately
+  create that block's own piece, then move to the next block — the legitimate pattern this
+  validation requires, and a good illustration of why the fix matters even for scripts that "look"
+  unrelated to the reported bug.
+- `docs/action-layer-schema.md`'s [Pieces](#pieces) section gained the full constraint writeup,
+  the `crossDraftBlockReference` error-type table entry, and a per-op "Known error cases" mention
+  on `piece.addPatternPiece`/`piece.internalPath`/`piece.insertNodes`/`piece.addAnchorPoint`, plus
+  an explicit "not affected" note on `piece.union`.
+
+## Phase 14 — Piece placement (bug fix) + optional per-piece grouping (new feature)
+
+**These are two separate, independently-found issues. Keep them separate when reading this
+entry: only the first was ever actually broken.**
+
+### Bug fix: `piece.addPatternPiece` pieces defaulted to identical position, with no way to avoid it
+
+- **Root cause, confirmed by reading `pattern_piece_tool.cpp:1586`
+  (`PatternPieceTool::RefreshGeometry()`):** `this->setPos(piece.GetMx(), piece.GetMy())` applies a
+  genuine position offset on top of a piece's own node-derived local shape — but `VPiece`
+  default-constructs `mx`/`my` to `(0,0)`, and neither `PatternPieceTool::Create()` nor
+  (before this phase) `piece.addPatternPiece`'s own handler ever assigned anything else. In
+  interactive use a human drags each new piece to a clear spot in the Piece/Layout view after
+  creating it — the real GUI doesn't auto-place pieces either — but a headless/AI-only caller has
+  no equivalent step, so every piece built with no explicit position landed at the exact same
+  place.
+- **Reproduced directly before writing any fix, not assumed:** two pieces (`"Front"`/`"Back"`)
+  built from two independently-drafted `basePoint`-anchored draft blocks that both happen to start
+  at the same origin — a realistic, common scenario, not a contrived edge case (`basePoint`
+  unconditionally starts a brand-new draft block per call, confirmed correct/intentional and left
+  untouched by this phase; see `point_handlers.cpp`'s own comment) — rendered completely on top of
+  each other; `render.snapshot`'s whole-scene output showed only one square, the other entirely
+  hidden underneath it.
+- **Fix:** new optional `"mx"`/`"my"` parameters on `piece.addPatternPiece`, passed straight
+  through to `VPiece::SetMx()`/`SetMy()`. Giving *either* one (even just one of the two) is always
+  taken exactly as given (the other defaulting to `0`) — auto-placement never touches an explicit
+  value. Omitting *both* triggers a new session-lifetime `PieceLayoutCursor`
+  (`piece_layout_cursor.h`, a small header-only class) that places the piece clear of every piece
+  already assembled this session: a simple left-to-right "shelf" layout, wrapping to a new row past
+  a width threshold — deliberately not a real cutting-layout/bin-packing algorithm, which is a
+  distinct, much larger feature already flagged out of scope as `export.scene`'s own "Phase B" work.
+  The response always echoes back the position actually used (`"mx"`/`"my"`), whichever path
+  produced it, so a caller can see the resolved position either way without re-deriving it.
+- **Wiring:** `ActionContext` gained an optional 5th constructor parameter, `PieceLayoutCursor
+  *pieceLayoutCursor` (defaults to `nullptr`, so every existing call site — `ActionHost`'s
+  now-delegated-to-`PatternSession` path, every `ActionLayerTest` fixture — keeps compiling and
+  behaving unchanged; a context with no cursor falls back to `mx=my=0`, exactly matching this op's
+  pre-existing behavior). `PatternSession` owns the one real instance (`m_pieceLayoutCursor`,
+  session-lifetime, declared before `m_context` since its address is taken in `m_context`'s own
+  initializer — member declaration order, not initializer-list order, decides construction order
+  in C++) and passes its address into `m_context`'s constructor — `ActionHost::runActions()` now
+  just delegates to `PatternSession::loadFromFile()` (confirmed by reading `action_host.cpp`), so
+  this same wiring covers both the one-shot `--actions <file>` CLI mode and the persistent NDJSON
+  daemon mode with no separate code path to keep in sync.
+- **Found and ruled out a false lead while building the regression test for this:** an early
+  version of the new test picked an explicit `"mx"`/`"my"` for a third piece that happened to
+  genuinely overlap a second, auto-placed piece — the resulting render looked exactly like a
+  rendering bug (a piece's seam-allowance fill "missing," outlines double-exposed) until
+  isolating it (removing pieces one at a time) showed it was real, correct overlap from a
+  poorly-chosen test coordinate, not a defect in the placement fix or in `PatternPieceTool`
+  rendering itself. Recorded here so nobody re-investigates the same dead end: `render.snapshot`
+  `target: "piece"` renders whichever piece it's asked to render — including piece geometry from a
+  *different*, genuinely overlapping piece, exactly as it should, if that overlap is real.
+
+### New feature (explicit opt-in, not a correction of previously-broken behavior): `createGroup`
+
+- New optional `"createGroup"` (default `false`) and `"groupName"` parameters on
+  `piece.addPatternPiece`: when `createGroup` is `true`, also creates a group containing the
+  piece's own *original* node points (e.g. `"A"`/`"B"`/`"C"`/`"D"`) — never this piece's own
+  internal `"__pieceNode_<id>"`-named clones, which are purely an implementation detail never meant
+  to be independently selected — named `groupName` if given, else this piece's own `"name"`.
+- **Confirmed this is genuinely optional, not a gap being closed:** `PatternPieceTool::Create()`
+  creates no group in the real GUI's own code path either (read directly, not assumed) — Aldrich's
+  per-piece groups (see Phase 13's fixture) were built by a human via the Groups panel afterward.
+  Worth adding anyway because an AI-only pipeline has no human available for that manual
+  organizational step, and an empty Group Manager is a worse experience even though nothing is
+  technically broken by it. Defaults to `false` specifically so this never silently changes output
+  for any existing caller of `piece.addPatternPiece`.
+- **Implementation reuses, rather than reimplements, group creation:** calls `handleGroup()`
+  (`operation_handlers.h`/`.cpp`) directly with a synthesized `{"name","sourceObjects"}` — the same
+  handler `"group"` itself already dispatches to, which already reuses `AddGroup::redo()`'s
+  (`vtools/undocommands/addgroup.cpp`) non-undo-stack logic in turn. The piece has already been
+  created successfully by the time this runs, so a `handleGroup()` failure (e.g. a group-name
+  collision with an unrelated pre-existing group) is reported via the response's `"groupError"`
+  field rather than failing the whole `piece.addPatternPiece` action — the piece really does exist
+  either way, and reporting the action as failed would misleadingly suggest otherwise.
+
+### Tests and docs (both issues)
+
+- New `tests/actionlayer/scripts/12_piece_placement_and_grouping.json`: builds `"Front"`/`"Back"`
+  from two same-origin draft blocks (no `"mx"`/`"my"`) and asserts, via each
+  `piece.addPatternPiece` result's own echoed `"mx"`/`"my"`, that `PieceLayoutCursor` separated
+  them (`"Back"`'s `mx` lands exactly `"Front"`'s width + margin to the right); `"Side"` (a third,
+  independent block) with explicit, deliberately non-colliding `"mx"`/`"my"` proves those are
+  honored exactly, not adjusted; `"Grouped"` (a fourth, independent block) with `"createGroup":
+  true` proves the group is created with the expected `sourceObjects`. Two `render.snapshot
+  target: "piece"` renders (`"Front"`/`"Back"`) opened and eyeballed, not just checked for
+  existence, before committing their golden copies.
+- `tests/actionlayer/scripts/06_piece_and_union.json`, `10_pattern_undo.json`, and
+  `11_piece_introspection.json` all call `piece.addPatternPiece` with no `"mx"`/`"my"`/
+  `"createGroup"` — their golden files gained the new `"mx"`/`"my"` echo fields (each lands at
+  `(0, ~377.95)`, the single/first piece placed at this session's origin) but **no** `"group"`/
+  `"groupError"` key, serving as the regression guard that `createGroup`'s default (`false`) truly
+  leaves the response shape — and the saved `<groups/>` section — unchanged from before this phase.
+- `docs/action-layer-schema.md`'s `piece.addPatternPiece` entry gained the four new parameters and
+  the extended example request/response.
+
 ## Phase 13 — Piece introspection (`piece.list`, `piece.dump`) + `render.snapshot` `target: "piece"`
 
 - **Closes the `render.snapshot` "no piece scene yet" gap** `render_handlers.h`/`.cpp` had

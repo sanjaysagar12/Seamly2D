@@ -26,6 +26,8 @@
 
 #include "../action_context.h"
 #include "../name_resolver.h"
+#include "../piece_layout_cursor.h" // Brings in PieceLayoutCursor, consulted by handlePieceAddPatternPiece() below when "mx"/"my" are both omitted.
+#include "operation_handlers.h"     // Brings in handleGroup(), reused directly by handlePieceAddPatternPiece()'s "createGroup" option instead of reimplementing its DOM-bookkeeping logic.
 
 #include "../../vpatterndb/vcontainer.h"
 #include "../../vpatterndb/vpiece.h"
@@ -35,6 +37,7 @@
 #include "../../vgeometry/vgeometrydef.h"
 #include "../../vgeometry/vpointf.h"
 #include "../../ifc/xml/vabstractpattern.h"
+#include "../../ifc/xml/vtoolrecord.h" // Brings in VToolRecord: getId()/getDraftBlockName(), read by checkSameDraftBlock() below to trace which draft block created a given object id.
 #include "../../ifc/exception/vexception.h"
 #include "../../ifc/ifcdef.h"
 #include "../../qmuparser/qmuparsererror.h"
@@ -53,6 +56,8 @@
 #include <QJsonObject>
 #include <QLineF>
 #include <QPointF>
+#include <QPolygonF>
+#include <QRectF>
 #include <QSharedPointer>
 #include <QString>
 #include <QVector>
@@ -110,31 +115,115 @@ namespace
         return false;
     }
 
+    // Returns the draft block name doc->getHistory() recorded for objectId -- via
+    // VToolRecord::getDraftBlockName(), the same field VAbstractTool::AddRecord() stamps every
+    // tool's own id with, using whatever doc->getActiveDraftBlockName() was AT THE TIME that
+    // specific tool was created (see vabstracttool.cpp's AddRecord()) -- or an empty string if no
+    // history entry names this id at all.
+    //
+    // KNOWN GAP (documented, not silently unhandled): an operation-created destination point
+    // (move/rotation/mirrorByLine/mirrorByAxis) has no individual history entry of its own -- only
+    // the *operation* tool's own id does (confirmed by reading vtoolmove.cpp/vtoolrotation.cpp/
+    // vtoolmirrorbyline.cpp/vtoolmirrorbyaxis.cpp's own AddRecord() calls, each passing the
+    // operation's own id, never a per-destination-point one). Such a point's own draft block
+    // cannot be determined this way; checkSameDraftBlock() below treats that as "unverifiable,"
+    // not as a violation, rather than either false-blocking a legitimate reference or attempting a
+    // more complex reverse trace back to an owning operation tool. Flagged as a real, narrow,
+    // currently-uncovered gap in this cross-draft-block check, not something this fix claims to
+    // close completely.
+    QString draftBlockForObjectId(quint32 objectId, VAbstractPattern *doc)
+    {
+        QVector<VToolRecord> *history = doc->getHistory();
+        if (history != nullptr)
+        {
+            for (const VToolRecord &record : *history)
+            {
+                if (record.getId() == objectId)
+                {
+                    return record.getDraftBlockName();
+                }
+            }
+        }
+        return QString();
+    }
+
+    // FOUND AND FIXED -- cross-draft-block dangling reference (see piece_handlers.h's own
+    // module-level comment for the full root-cause writeup): confirms every id in ids was created
+    // in the same draft block as doc's own currently-active one
+    // (VAbstractPattern::getActiveDraftBlockName()). A mismatch here would otherwise silently
+    // corrupt the saved file on reload -- not in this live session, where VContainer's
+    // calculation-scope objects never get wiped mid-session, only during file *parsing*
+    // (VPattern::parseDraftBlockElement()'s ClearCalculationGObjects() call) -- so this check has
+    // to run BEFORE any DOM element or modeling clone is created from these ids, not after.
+    //
+    // An id with no history entry at all (see draftBlockForObjectId()'s own comment on the one
+    // documented gap this leaves) is skipped -- treated as unverifiable, not as a violation.
+    bool checkSameDraftBlock(const QVector<quint32> &ids, const QJsonArray &namesEcho, VAbstractPattern *doc,
+                             QJsonValue &outError)
+    {
+        const QString activeDraftBlock = doc->getActiveDraftBlockName();
+        QJsonArray offendingNodes;
+        QString foundDraftBlock;
+        for (int i = 0; i < ids.size(); ++i)
+        {
+            const QString block = draftBlockForObjectId(ids.at(i), doc);
+            if (block.isEmpty() || block == activeDraftBlock)
+            {
+                continue; // Either unverifiable (see above) or already matches -- nothing to report.
+            }
+            offendingNodes.append(namesEcho.at(i));
+            foundDraftBlock = block; // Last mismatching block found; sufficient for a single-field error report -- a script referencing more than one *other* draft block in one call is already unusual enough that naming just one is a fine diagnostic starting point.
+        }
+        if (offendingNodes.isEmpty())
+        {
+            return true;
+        }
+
+        QJsonObject error;
+        error["type"] = QStringLiteral("crossDraftBlockReference");
+        error["message"] = QStringLiteral(
+            "One or more referenced nodes belong to a different draft block ('%1') than the "
+            "currently active one ('%2') -- referencing a point from another draft block would "
+            "silently corrupt this pattern on reload, since that other draft block's own "
+            "calculation-scope objects get cleared once a later block's own <calculation> "
+            "section is parsed.").arg(foundDraftBlock, activeDraftBlock);
+        error["offendingNodes"] = offendingNodes;
+        error["expectedDraftBlock"] = activeDraftBlock;
+        error["foundDraftBlock"] = foundDraftBlock;
+        outError = QJsonValue(error);
+        return false;
+    }
+
     // Resolves a JSON array of point names into a QVector<VPieceNode> (every node Tool::NodePoint,
     // reverse=false -- see this file's header comment on the documented arc/curve-node gap).
-    // Returns an empty vector (and fills outError) on the first unresolved/wrong-type name.
-    bool resolvePointNodes(const QJsonArray &namesArg, const VContainer *data, const QString &op,
-                           QVector<VPieceNode> &outNodes, QVector<quint32> &outIds, QJsonArray &outNamesEcho,
-                           QString &outError)
+    // Returns an empty vector (and fills outError) on the first unresolved/wrong-type name, or on
+    // a cross-draft-block reference (checkSameDraftBlock() above) once every name has resolved.
+    bool resolvePointNodes(const QJsonArray &namesArg, const VContainer *data, VAbstractPattern *doc,
+                           const QString &op, QVector<VPieceNode> &outNodes, QVector<quint32> &outIds,
+                           QJsonArray &outNamesEcho, QJsonValue &outError)
     {
         for (const QJsonValue &nameValue : namesArg)
         {
             const QString name = nameValue.toString();
             if (name.isEmpty())
             {
-                outError = QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op);
+                outError = QJsonValue(QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op));
                 return false;
             }
             const quint32 id = NameResolver::idForName(name, data, Draw::Calculation); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
             const QString typeError = checkIsPoint(data, id, QStringLiteral("nodes"), name);
             if (!typeError.isEmpty())
             {
-                outError = typeError;
+                outError = QJsonValue(typeError);
                 return false;
             }
             outNodes.append(VPieceNode(id, Tool::NodePoint, false));
             outIds.append(id);
             outNamesEcho.append(name);
+        }
+        if (!checkSameDraftBlock(outIds, outNamesEcho, doc, outError))
+        {
+            return false;
         }
         return true;
     }
@@ -158,31 +247,55 @@ namespace
     // "piece.insertNodes" is the one op in this file that does NOT need this: PatternPieceTool::
     // insertNodes() (pattern_piece_tool.cpp) calls PrepareNode() itself internally (legal there --
     // it runs inside a VAbstractTool subclass's own static member function), so that op's own
-    // resolvePointNodes() (below) intentionally passes the original point ids straight through.
+    // resolvePointNodes() (above) intentionally passes the original point ids straight through.
+    //
+    // Resolves every name (Phase 1: name -> id, type-checked) and validates the whole set belongs
+    // to the currently active draft block (Phase 2: checkSameDraftBlock()) BEFORE creating a
+    // single clone (Phase 3) -- deliberately split into these three passes, rather than resolving
+    // and cloning one name at a time in a single loop as an earlier version of this function did,
+    // so that ANY failure (an unresolved name, a cross-draft-block reference) leaves zero dangling,
+    // unreferenced modeling clones behind. A failure partway through a single combined loop would
+    // have already cloned every name processed so far with no way to undo it -- exactly the kind
+    // of non-atomic failure piece_handlers.h's own "FOUND AND FIXED -- cross-draft-block..."
+    // module comment warns a caller's automated retry logic could stumble over.
     bool resolvePreparedPointNodes(const QJsonArray &namesArg, VContainer *data, VAbstractPattern *doc,
                                    VMainGraphicsScene *scene, const QString &op, QVector<VPieceNode> &outNodes,
-                                   QVector<quint32> &outOriginalIds, QJsonArray &outNamesEcho, QString &outError)
+                                   QVector<quint32> &outOriginalIds, QJsonArray &outNamesEcho, QJsonValue &outError)
     {
+        // Phase 1: name -> id, type-checked. No clone created yet.
+        QVector<quint32> originalIds;
         for (const QJsonValue &nameValue : namesArg)
         {
             const QString name = nameValue.toString();
             if (name.isEmpty())
             {
-                outError = QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op);
+                outError = QJsonValue(QStringLiteral("%1: \"nodes\" contains a non-string/empty entry").arg(op));
                 return false;
             }
             const quint32 pointId = NameResolver::idForName(name, data, Draw::Calculation); // Uncaught by design; ActionEngine's ActionResolverError clause reports it.
             const QString typeError = checkIsPoint(data, pointId, QStringLiteral("nodes"), name);
             if (!typeError.isEmpty())
             {
-                outError = typeError;
+                outError = QJsonValue(typeError);
                 return false;
             }
+            originalIds.append(pointId);
+            outNamesEcho.append(name);
+        }
 
+        // Phase 2: every resolved id must belong to the pattern's currently active draft block.
+        if (!checkSameDraftBlock(originalIds, outNamesEcho, doc, outError))
+        {
+            return false;
+        }
+
+        // Phase 3: only now, with every id validated, actually clone each one.
+        for (quint32 pointId : originalIds)
+        {
             const quint32 nodeId = VAbstractTool::CreateNode<VPointF>(data, pointId);
             // Defense-in-depth, kept intentionally even though NameResolver::idForName()'s scoped
             // (Draw::Calculation) overload -- used everywhere in this action layer that resolves a
-            // calculation-context name, including the lookup just above -- now makes this rename
+            // calculation-context name, including the lookup above -- now makes this rename
             // unnecessary on its own: a scoped lookup filters on getMode() before ever comparing
             // names, so it architecturally cannot match a Draw::Modeling clone regardless of what
             // that clone is named. This rename predates the scoped overload (originally the *only*
@@ -207,7 +320,6 @@ namespace
 
             outNodes.append(VPieceNode(nodeId, Tool::NodePoint, false));
             outOriginalIds.append(pointId);
-            outNamesEcho.append(name);
         }
         return true;
     }
@@ -290,7 +402,7 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
     QVector<VPieceNode> nodes;
     QVector<quint32> originalPointIds;
     QJsonArray nodeNamesEcho;
-    QString resolveError;
+    QJsonValue resolveError;
     if (!resolvePreparedPointNodes(nodesArg, data, doc, pieceScene, QStringLiteral("piece.addPatternPiece"), nodes,
                                    originalPointIds, nodeNamesEcho, resolveError))
     {
@@ -309,6 +421,36 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
         error["nodes"] = nodeNamesEcho;
         return ActionResult::failure(QJsonValue(error));
     }
+
+    // "mx"/"my": PatternPieceTool::RefreshGeometry() (pattern_piece_tool.cpp:1586) applies
+    // setPos(piece.GetMx(), piece.GetMy()) on top of the item's own node-derived local shape --
+    // VPiece default-constructs both to 0, and neither this handler nor PatternPieceTool::Create()
+    // itself (confirmed by reading it) ever assigns anything else, so every piece built with no
+    // explicit "mx"/"my" used to land at the exact same position: reproduced directly (20 Aug 2026)
+    // -- two pieces built from two independently-drafted, coordinate-overlapping draft blocks
+    // rendered completely on top of each other. Auto-placement (PieceLayoutCursor, only consulted
+    // when BOTH "mx" and "my" are omitted -- an explicit value, even just one of the two, always
+    // wins outright and is never adjusted) exists specifically to give a headless/AI-only caller
+    // the same "pieces don't overlap by default" outcome a human gets for free by dragging each
+    // new piece to a clear spot after creating it.
+    qreal mx = 0.0;
+    qreal my = 0.0;
+    if (args.contains(QStringLiteral("mx")) || args.contains(QStringLiteral("my")))
+    {
+        mx = args.value(QStringLiteral("mx")).toDouble(0.0);
+        my = args.value(QStringLiteral("my")).toDouble(0.0);
+    }
+    else if (PieceLayoutCursor *layoutCursor = ctx.pieceLayoutCursor())
+    {
+        const QRectF rawBounds = QPolygonF(points).boundingRect();
+        const QPointF offset = layoutCursor->placeNext(rawBounds);
+        mx = offset.x();
+        my = offset.y();
+    }
+    // No cursor available at all (e.g. a raw ActionLayerTest fixture with no PatternSession behind
+    // it) and no explicit "mx"/"my": falls through with mx=my=0.0, exactly matching this op's
+    // pre-existing behavior for every such context -- see ActionContext::pieceLayoutCursor()'s own
+    // doc comment on why this is the correct, non-breaking fallback rather than a hard error.
 
     QString widthFormula = args.value(QStringLiteral("seamAllowanceWidth")).toString();
 
@@ -346,6 +488,8 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
         {
             piece.setColor(args.value(QStringLiteral("pieceColor")).toString());
         }
+        piece.SetMx(mx);
+        piece.SetMy(my);
 
         PatternPieceTool *tool = PatternPieceTool::Create(0, piece, widthFormula, pieceScene, doc, data,
                                                             Document::FullParse, Source::FromGui);
@@ -357,7 +501,42 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
         QJsonObject payload;
         payload["id"] = static_cast<qint64>(tool->getId());
         payload["name"] = name;
+        payload["mx"] = mx; // The position actually used -- either the caller's own explicit "mx"/"my", or (both omitted) whatever PieceLayoutCursor auto-placed this piece at, so a caller can see the resolved position either way without re-deriving it.
+        payload["my"] = my;
         payload["op"] = QStringLiteral("piece.addPatternPiece");
+
+        // "createGroup" (optional, default false -- see this op's own schema description in
+        // action_registry.cpp for why the default is off): reuses handleGroup() (operation_
+        // handlers.cpp/.h) directly rather than reimplementing its DOM-bookkeeping logic, exactly
+        // the way that handler itself already reuses AddGroup::redo()'s (vtools/undocommands/
+        // addgroup.cpp) non-undo-stack logic. Grouped by the ORIGINAL draft point names
+        // (nodeNamesEcho, e.g. "A"/"B"/"C"/"D") -- not this piece's own internal
+        // "__pieceNode_<id>"-named clones (see resolvePreparedPointNodes()'s own comment on that
+        // rename) -- since those clones are purely an internal implementation detail, never meant
+        // to be independently selected/grouped, and NameResolver's Draw::Calculation scoping
+        // (which handleGroup()'s own "sourceObjects" resolution uses) could not resolve a clone's
+        // mangled name by name anyway. The piece itself has already been created successfully by
+        // this point, so a group-creation failure (e.g. a name collision with an unrelated
+        // pre-existing group) is reported alongside the success payload as "groupError" rather
+        // than failing this whole action -- the piece really does exist either way, and reporting
+        // this action as failed would misleadingly suggest otherwise.
+        if (args.value(QStringLiteral("createGroup")).toBool(false))
+        {
+            const QString groupName = args.value(QStringLiteral("groupName")).toString(name);
+            QJsonObject groupArgs;
+            groupArgs["name"] = groupName;
+            groupArgs["sourceObjects"] = nodeNamesEcho;
+            const ActionResult groupResult = handleGroup(groupArgs, ctx);
+            if (groupResult.ok)
+            {
+                payload["group"] = groupResult.value;
+            }
+            else
+            {
+                payload["groupError"] = groupResult.error;
+            }
+        }
+
         return ActionResult::success(payload);
     }
     catch (const qmu::QmuParserError &error)
@@ -405,6 +584,18 @@ ActionResult handlePieceAddAnchorPoint(const QJsonObject &args, const ActionCont
     if (!typeError.isEmpty())
     {
         return ActionResult::failure(typeError);
+    }
+
+    // See piece_handlers.h's own "FOUND AND FIXED -- cross-draft-block..." module comment: AnchorPointTool::
+    // Create() clones "point" (CreateNode<VPointF>()) the same way piece.addPatternPiece/
+    // piece.internalPath's own node resolution does, so an anchor referencing a point from a
+    // different draft block than the one currently active is exposed to the exact same
+    // silently-corrupts-on-reload failure mode -- checked here, before Create() (and its internal
+    // clone) ever runs, for the same reason.
+    QJsonValue blockError;
+    if (!checkSameDraftBlock(QVector<quint32>{pointId}, QJsonArray{pointName}, doc, blockError))
+    {
+        return ActionResult::failure(blockError);
     }
 
     quint32 pieceId = 0;
@@ -481,7 +672,7 @@ ActionResult handlePieceInternalPath(const QJsonObject &args, const ActionContex
     QVector<VPieceNode> nodes;
     QVector<quint32> originalPointIds;
     QJsonArray nodeNamesEcho;
-    QString resolveError;
+    QJsonValue resolveError;
     if (!resolvePreparedPointNodes(nodesArg, data, doc, pieceScene, QStringLiteral("piece.internalPath"), nodes,
                                    originalPointIds, nodeNamesEcho, resolveError))
     {
@@ -561,8 +752,8 @@ ActionResult handlePieceInsertNodes(const QJsonObject &args, const ActionContext
     QVector<VPieceNode> nodes;
     QVector<quint32> nodeIds;
     QJsonArray nodeNamesEcho;
-    QString resolveError;
-    if (!resolvePointNodes(nodesArg, data, QStringLiteral("piece.insertNodes"), nodes, nodeIds, nodeNamesEcho,
+    QJsonValue resolveError;
+    if (!resolvePointNodes(nodesArg, data, doc, QStringLiteral("piece.insertNodes"), nodes, nodeIds, nodeNamesEcho,
                            resolveError))
     {
         return ActionResult::failure(resolveError);

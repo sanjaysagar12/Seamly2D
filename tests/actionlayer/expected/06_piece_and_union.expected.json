@@ -85,6 +85,8 @@
             "op": "piece.addPatternPiece",
             "value": {
                 "id": 13,
+                "mx": 0,
+                "my": 377.9527559055118,
                 "name": "Square",
                 "op": "piece.addPatternPiece"
             }

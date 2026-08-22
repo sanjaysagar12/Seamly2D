@@ -1,0 +1,47 @@
+{
+    "_description": "piece.addPatternPiece's \"mx\"/\"my\" auto-placement fix and optional \"createGroup\" convenience. Reproduces the original reported bug directly: \"Front\" and \"Back\" are built from two INDEPENDENT draft blocks that both start at the exact same origin (0,0) -- before the fix, both pieces landed at mx=my=0 too (PatternPieceTool::Create() never assigns a piece a position beyond VPiece's own default), rendering completely on top of each other. With no \"mx\"/\"my\" given, PieceLayoutCursor now auto-places \"Back\" clear of \"Front\" (asserted directly via each piece.addPatternPiece result's own echoed \"mx\"/\"my\"). \"Side\" (a third, independent block) then proves an explicit \"mx\"/\"my\" is honored exactly, not silently overridden by auto-placement. \"Grouped\" (a fourth, independent block) proves \"createGroup: true\" creates a group over the piece's own original point names, reusing the existing \"group\" op's own handler rather than new logic. Each piece is built (piece.addPatternPiece called) immediately after its own draft block's points, before the next draft block starts -- the legitimate pattern the cross-draft-block validation (see piece_handlers.h's own \"FOUND AND FIXED\" comment) requires: a piece's nodes must belong to whichever draft block is currently active AT THE TIME piece.addPatternPiece is called, not merely to some draft block that existed earlier in the script.",
+    "actions": [
+        { "op": "basePoint", "name": "F1", "x": 0, "y": 0, "draftBlock": "FrontBlock" },
+        { "op": "endLine", "name": "F2", "basePoint": "F1", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "F3", "basePoint": "F2", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "F4", "basePoint": "F1", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "F1", "secondPoint": "F2" },
+        { "op": "line", "firstPoint": "F2", "secondPoint": "F3" },
+        { "op": "line", "firstPoint": "F3", "secondPoint": "F4" },
+        { "op": "line", "firstPoint": "F4", "secondPoint": "F1" },
+        { "op": "piece.addPatternPiece", "name": "Front", "nodes": ["F1", "F2", "F3", "F4"], "seamAllowanceWidth": "10" },
+
+        { "op": "basePoint", "name": "B1", "x": 0, "y": 0, "draftBlock": "BackBlock" },
+        { "op": "endLine", "name": "B2", "basePoint": "B1", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "B3", "basePoint": "B2", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "B4", "basePoint": "B1", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "B1", "secondPoint": "B2" },
+        { "op": "line", "firstPoint": "B2", "secondPoint": "B3" },
+        { "op": "line", "firstPoint": "B3", "secondPoint": "B4" },
+        { "op": "line", "firstPoint": "B4", "secondPoint": "B1" },
+        { "op": "piece.addPatternPiece", "name": "Back", "nodes": ["B1", "B2", "B3", "B4"], "seamAllowanceWidth": "10" },
+
+        { "op": "basePoint", "name": "S1", "x": 0, "y": 0, "draftBlock": "SideBlock" },
+        { "op": "endLine", "name": "S2", "basePoint": "S1", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "S3", "basePoint": "S2", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "S4", "basePoint": "S1", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "S1", "secondPoint": "S2" },
+        { "op": "line", "firstPoint": "S2", "secondPoint": "S3" },
+        { "op": "line", "firstPoint": "S3", "secondPoint": "S4" },
+        { "op": "line", "firstPoint": "S4", "secondPoint": "S1" },
+        { "op": "piece.addPatternPiece", "name": "Side", "nodes": ["S1", "S2", "S3", "S4"], "seamAllowanceWidth": "10", "mx": 2000, "my": 1000 },
+
+        { "op": "basePoint", "name": "G1", "x": 0, "y": 0, "draftBlock": "GroupBlock" },
+        { "op": "endLine", "name": "G2", "basePoint": "G1", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "G3", "basePoint": "G2", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "G4", "basePoint": "G1", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "G1", "secondPoint": "G2" },
+        { "op": "line", "firstPoint": "G2", "secondPoint": "G3" },
+        { "op": "line", "firstPoint": "G3", "secondPoint": "G4" },
+        { "op": "line", "firstPoint": "G4", "secondPoint": "G1" },
+        { "op": "piece.addPatternPiece", "name": "Grouped", "nodes": ["G1", "G2", "G3", "G4"], "seamAllowanceWidth": "10", "createGroup": true },
+
+        { "op": "render.snapshot", "path": "front_piece.png", "target": "piece", "piece": "Front" },
+        { "op": "render.snapshot", "path": "back_piece.png", "target": "piece", "piece": "Back" }
+    ]
+}

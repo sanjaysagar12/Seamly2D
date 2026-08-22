@@ -1,0 +1,235 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 3,
+                "name": "C",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 4,
+                "name": "D",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 5,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "B",
+                "id": 6,
+                "secondPoint": "C"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "C",
+                "id": 7,
+                "secondPoint": "D"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "D",
+                "id": 8,
+                "secondPoint": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 9,
+                "name": "E"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 10,
+                "name": "F",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 11,
+                "name": "G",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 12,
+                "name": "H",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "E",
+                "id": 13,
+                "secondPoint": "F"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "F",
+                "id": 14,
+                "secondPoint": "G"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "G",
+                "id": 15,
+                "secondPoint": "H"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "H",
+                "id": 16,
+                "secondPoint": "E"
+            }
+        },
+        {
+            "error": {
+                "expectedDraftBlock": "RectangleBlock",
+                "foundDraftBlock": "SquareBlock",
+                "message": "One or more referenced nodes belong to a different draft block ('SquareBlock') than the currently active one ('RectangleBlock') -- referencing a point from another draft block would silently corrupt this pattern on reload, since that other draft block's own calculation-scope objects get cleared once a later block's own <calculation> section is parsed.",
+                "offendingNodes": [
+                    "A",
+                    "B",
+                    "C",
+                    "D"
+                ],
+                "type": "crossDraftBlockReference"
+            },
+            "ok": false,
+            "op": "piece.addPatternPiece",
+            "value": null
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.addPatternPiece",
+            "value": {
+                "id": 21,
+                "mx": 0,
+                "my": 302.3622047244095,
+                "name": "GoodRectangle",
+                "op": "piece.addPatternPiece"
+            }
+        },
+        {
+            "error": {
+                "expectedDraftBlock": "RectangleBlock",
+                "foundDraftBlock": "SquareBlock",
+                "message": "One or more referenced nodes belong to a different draft block ('SquareBlock') than the currently active one ('RectangleBlock') -- referencing a point from another draft block would silently corrupt this pattern on reload, since that other draft block's own calculation-scope objects get cleared once a later block's own <calculation> section is parsed.",
+                "offendingNodes": [
+                    "A",
+                    "C"
+                ],
+                "type": "crossDraftBlockReference"
+            },
+            "ok": false,
+            "op": "piece.internalPath",
+            "value": null
+        },
+        {
+            "error": {
+                "expectedDraftBlock": "RectangleBlock",
+                "foundDraftBlock": "SquareBlock",
+                "message": "One or more referenced nodes belong to a different draft block ('SquareBlock') than the currently active one ('RectangleBlock') -- referencing a point from another draft block would silently corrupt this pattern on reload, since that other draft block's own calculation-scope objects get cleared once a later block's own <calculation> section is parsed.",
+                "offendingNodes": [
+                    "A"
+                ],
+                "type": "crossDraftBlockReference"
+            },
+            "ok": false,
+            "op": "piece.addAnchorPoint",
+            "value": null
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.list",
+            "value": {
+                "pieces": [
+                    {
+                        "id": 21,
+                        "name": "GoodRectangle",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    }
+                ]
+            }
+        }
+    ]
+}

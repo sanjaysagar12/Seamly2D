@@ -750,6 +750,136 @@ namespace
                                "including both resolved points and unsupported curve nodes)\n").arg(nodes.size());
         return true;
     }
+
+    // Regression coverage for the cross-draft-block dangling-reference fix (see piece_handlers.h's
+    // own "FOUND AND FIXED -- cross-draft-block dangling reference" module comment for the full
+    // root-cause writeup): confirms the LEGITIMATE multi-piece pattern -- every point for every
+    // piece built within one shared draft block, mirroring Aldrich's own real file structure (see
+    // checkPieceDumpRealFile() above) rather than a second basePoint call per piece -- still works
+    // exactly as before this fix, AND that a pattern built this way genuinely reopens cleanly.
+    //
+    // This bespoke check exists (rather than a scripts/*.json case) for the same reason
+    // checkMeasurementsPathRegression() above does: the bug this guards against is specifically
+    // "works fine live, corrupts on reload" -- invisible to any in-process check, including a plain
+    // scripts/*.json diff against the response from the SAME process that built the pattern. The
+    // only test that actually proves the fix holds is reloading the saved file in a genuinely FRESH
+    // actiond process, exactly as a real GUI reopen (or a second daemon session) would.
+    bool checkSharedDraftBlockMultiPieceRegression(const QString &actiondExe)
+    {
+        const QString caseName = QStringLiteral("shared_draft_block_multi_piece");
+        const QString caseOutputDir = outputDir() + QLatin1Char('/') + caseName;
+        QDir().mkpath(caseOutputDir);
+
+        // "PieceTwo" shares two points (B, C) with "PieceOne" -- the same way adjacent real
+        // garment pieces commonly share construction points -- both built from ONE draft block
+        // ("MainBlock"), basePoint called exactly once, matching the legitimate pattern this fix
+        // must never reject.
+        const QByteArray scriptJson = R"({
+            "actions": [
+                { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "MainBlock" },
+                { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+                { "op": "endLine", "name": "C", "basePoint": "B", "length": "100", "angle": "90" },
+                { "op": "endLine", "name": "D", "basePoint": "A", "length": "100", "angle": "90" },
+                { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+                { "op": "line", "firstPoint": "B", "secondPoint": "C" },
+                { "op": "line", "firstPoint": "C", "secondPoint": "D" },
+                { "op": "line", "firstPoint": "D", "secondPoint": "A" },
+                { "op": "endLine", "name": "E", "basePoint": "B", "length": "100", "angle": "0" },
+                { "op": "endLine", "name": "F", "basePoint": "E", "length": "100", "angle": "90" },
+                { "op": "line", "firstPoint": "B", "secondPoint": "E" },
+                { "op": "line", "firstPoint": "E", "secondPoint": "F" },
+                { "op": "line", "firstPoint": "F", "secondPoint": "C" },
+                { "op": "piece.addPatternPiece", "name": "PieceOne", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10" },
+                { "op": "piece.addPatternPiece", "name": "PieceTwo", "nodes": ["B", "E", "F", "C"], "seamAllowanceWidth": "10" }
+            ]
+        })";
+
+        QJsonParseError parseError;
+        const QJsonDocument scriptDoc = QJsonDocument::fromJson(scriptJson, &parseError);
+        if (parseError.error != QJsonParseError::NoError)
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] ERROR: could not parse this check's own inline script: %1\n")
+                       .arg(parseError.errorString());
+            return false;
+        }
+        const QString actionsPath = caseOutputDir + QStringLiteral("/actions.json");
+        if (!writeFile(actionsPath, scriptDoc.toJson()))
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] ERROR: could not write %1\n").arg(actionsPath);
+            return false;
+        }
+
+        // Phase 1: build both pieces (one shared draft block) and save, in a first process.
+        const RunResult buildRun = runOneCase(actiondExe, defaultPattern(), defaultMeasurements(), actionsPath, caseOutputDir);
+        if (!buildRun.ranAtAll || buildRun.exitCode != 0)
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] ERROR: could not build the shared-draft-block pattern -- see %1/stderr.log\n").arg(caseOutputDir);
+            return false;
+        }
+        const QJsonArray buildResults = buildRun.response.object().value(QStringLiteral("results")).toArray();
+        for (const QJsonValue &resultValue : buildResults)
+        {
+            const QJsonObject result = resultValue.toObject();
+            if (result.value(QStringLiteral("op")).toString().startsWith(QStringLiteral("piece."))
+                && !result.value(QStringLiteral("ok")).toBool())
+            {
+                err << QStringLiteral("[shared_draft_block_multi_piece] FAIL: a legitimate same-draft-block piece op "
+                                       "failed (it must not, per this fix's own \"still works exactly as before\" "
+                                       "requirement): %1\n")
+                           .arg(QString::fromUtf8(QJsonDocument(result.value(QStringLiteral("error")).toObject()).toJson(QJsonDocument::Compact)));
+                return false;
+            }
+        }
+        const QString savedPatternPath = caseOutputDir + QStringLiteral("/pattern.val");
+        if (!QFileInfo::exists(savedPatternPath))
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] ERROR: expected saved pattern at %1\n").arg(savedPatternPath);
+            return false;
+        }
+
+        // Phase 2 (the actual point of this check -- see the module comment above): reload the
+        // SAVED file into a genuinely FRESH actiond process, with a trivial "piece.list" as its
+        // only action, and confirm both pieces survived the reload.
+        const QString reloadOutputDir = outputDir() + QLatin1Char('/') + caseName + QStringLiteral("_reload");
+        QDir().mkpath(reloadOutputDir);
+        QJsonObject listAction;
+        listAction[QStringLiteral("op")] = QStringLiteral("piece.list");
+        QJsonObject reloadScript;
+        reloadScript[QStringLiteral("actions")] = QJsonArray{listAction};
+        const QString reloadActionsPath = reloadOutputDir + QStringLiteral("/reload_actions.json");
+        if (!writeFile(reloadActionsPath, QJsonDocument(reloadScript).toJson()))
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] ERROR: could not write %1\n").arg(reloadActionsPath);
+            return false;
+        }
+
+        const RunResult reloadRun = runOneCase(actiondExe, savedPatternPath, QString(), reloadActionsPath, reloadOutputDir);
+        if (!reloadRun.ranAtAll || reloadRun.exitCode != 0)
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] FAIL: reloading the saved pattern in a fresh "
+                                   "process failed to run cleanly (this is exactly the scenario a real GUI reopen "
+                                   "hits) -- see %1/stderr.log\n").arg(reloadOutputDir);
+            return false;
+        }
+        const QJsonArray reloadResults = reloadRun.response.object().value(QStringLiteral("results")).toArray();
+        if (reloadResults.size() != 1 || !reloadResults.first().toObject().value(QStringLiteral("ok")).toBool())
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] FAIL: reloaded piece.list did not succeed\n");
+            return false;
+        }
+        const QJsonArray pieces = reloadResults.first().toObject().value(QStringLiteral("value")).toObject().value(QStringLiteral("pieces")).toArray();
+        if (pieces.size() != 2)
+        {
+            err << QStringLiteral("[shared_draft_block_multi_piece] FAIL: expected 2 pieces after reloading in a fresh "
+                                   "process, got %1 -- the exact class of silent, reload-only corruption this fix "
+                                   "closes would surface here as a missing piece or a reload crash\n").arg(pieces.size());
+            return false;
+        }
+
+        out << QStringLiteral("[shared_draft_block_multi_piece] PASS (2 pieces built in one shared draft block, "
+                               "saved, and reloaded cleanly with both pieces intact in a fresh actiond process)\n");
+        return true;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -799,7 +929,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        const int totalChecks = scripts.size() + 3; // +1 for checkListToolsAi(), +1 for checkMeasurementsPathRegression(), +1 for checkPieceDumpRealFile() below -- all three actiond-CLI checks independent of any single scripts/*.json case's own JSON diff.
+        const int totalChecks = scripts.size() + 4; // +1 each for checkListToolsAi(), checkMeasurementsPathRegression(), checkPieceDumpRealFile(), checkSharedDraftBlockMultiPieceRegression() below -- all four actiond-CLI checks independent of any single scripts/*.json case's own JSON diff.
         if (checkListToolsAi(actiondExe))
         {
             ++passed;
@@ -809,6 +939,10 @@ int main(int argc, char *argv[])
             ++passed;
         }
         if (checkPieceDumpRealFile(actiondExe))
+        {
+            ++passed;
+        }
+        if (checkSharedDraftBlockMultiPieceRegression(actiondExe))
         {
             ++passed;
         }

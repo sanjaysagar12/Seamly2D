@@ -90,7 +90,8 @@ PatternSession::PatternSession(const QString &patternFilePath, const QString &me
     , m_doc(new VPattern(m_data, m_draftScene, m_pieceScene))
     , m_registry()  // Auto-registers every built-in action handler.
     , m_engine(m_registry)
-    , m_context(m_draftScene, m_doc.data(), m_data, m_pieceScene)
+    , m_pieceLayoutCursor() // Default-constructed: starts empty, accumulates as piece.addPatternPiece auto-places pieces over this session's lifetime.
+    , m_context(m_draftScene, m_doc.data(), m_data, m_pieceScene, &m_pieceLayoutCursor)
 {
     // Several reused undo-command redo() paths (e.g. AddToCalc::redo(), which every mutating
     // draw-tool's AddToFile() goes through) unconditionally call VMainGraphicsView::NewSceneRect
