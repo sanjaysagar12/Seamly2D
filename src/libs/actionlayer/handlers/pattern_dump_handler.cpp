@@ -77,15 +77,15 @@ QString goTypeToString(GOType type)
     return QStringLiteral("Unknown"); // Never crash on an unrecognized value; fail loudly via the warning above instead.
 }
 
-namespace
+// Converts a Tool enumerator to its exact C++ name, mirroring goTypeToString()'s contract: every
+// current enumerator is listed explicitly, and anything unmapped logs a warning and reports
+// "Unknown" instead of crashing. Declared in pattern_dump_handler.h (not file-local, as it was
+// before piece_dump_handler.cpp needed the same stringification for its per-node "type" field) so
+// that file can reuse this exact mapping instead of duplicating it.
+QString toolToString(Tool tool)
 {
-    // Converts a Tool enumerator to its exact C++ name, mirroring goTypeToString()'s contract:
-    // every current enumerator is listed explicitly, and anything unmapped logs a warning and
-    // reports "Unknown" instead of crashing.
-    QString toolToString(Tool tool)
+    switch (tool)
     {
-        switch (tool)
-        {
             case Tool::Arrow:                        return QStringLiteral("Arrow");                        // Selection/arrow tool.
             case Tool::SinglePoint:                   return QStringLiteral("SinglePoint");                   // Generic single-point visualization.
             case Tool::DoublePoint:                   return QStringLiteral("DoublePoint");                   // Generic two-point visualization.
@@ -143,9 +143,8 @@ namespace
             case Tool::LAST_ONE_DO_NOT_USE:           return QStringLiteral("LAST_ONE_DO_NOT_USE");           // Sentinel value; never a real tool, mapped only so the switch stays exhaustive.
         }
 
-        qWarning() << "toolToString: unmapped Tool value" << static_cast<int>(tool); // Log so a future enumerator gets noticed, not silently misreported.
-        return QStringLiteral("Unknown"); // Never crash on an unrecognized value; fail loudly via the warning above instead.
-    }
+    qWarning() << "toolToString: unmapped Tool value" << static_cast<int>(tool); // Log so a future enumerator gets noticed, not silently misreported.
+    return QStringLiteral("Unknown"); // Never crash on an unrecognized value; fail loudly via the warning above instead.
 }
 
 // Implements "pattern.dump": a read-only snapshot of every geometry object and every tool

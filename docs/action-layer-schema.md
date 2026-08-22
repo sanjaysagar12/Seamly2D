@@ -172,7 +172,7 @@ Which shape a given failure uses is a property of *where* the check lives, not o
   | `unsupported`               | `point.edit` naming a field that doesn't apply to the point's actual tool type | — |
   | `toolNotFound`              | `point.edit` naming a point with no registered tool (e.g. an operation-created destination point from `move`/`rotation`/`mirrorByLine`/`mirrorByAxis`) | — |
   | `invalidPiecePath`          | `piece.addPatternPiece`'s `"nodes"` not forming a closed, non-self-intersecting polygon | `nodes` (the echoed node-name array) |
-  | `unknownPiece`               | `piece.addAnchorPoint`/`piece.internalPath`/`piece.insertNodes`/`piece.union` naming a piece that doesn't exist | `piece` |
+  | `unknownPiece`               | `piece.addAnchorPoint`/`piece.internalPath`/`piece.insertNodes`/`piece.union`/`piece.dump`/`render.snapshot` (`target: "piece"`) naming a piece that doesn't exist | `piece` |
   | `groupExists`                | `group` naming a group that already exists                            | `name` |
   | `missingMeasurements`       | `measurements.load`/`.sync`/`.recompute` against a file missing a measurement the pattern requires | `missing` (array of names) |
   | `measurementTypeMismatch`   | A measurement file supplying a value of the wrong type for a name the pattern expects | `expected`, `actual` |
@@ -286,9 +286,10 @@ An empty array is a valid, non-error result for a pattern with no measurements a
 
 Takes no parameters. **Must be kept in sync by hand** with `action_registry.cpp`'s registration
 list — it is not derived from the registry at runtime (its own header comment says so explicitly).
-Verified during this refresh: it currently lists all 49 registered ops correctly (was previously
-found out of sync with Phase 8's additions and backfilled 20 Aug 2026, per its own in-file
-changelog comment; Phase 12, 22 Aug 2026, added the `pattern.undo` entry alongside registering it).
+Currently lists all 51 registered ops correctly (was previously found out of sync with Phase 8's
+additions and backfilled 20 Aug 2026, per its own in-file changelog comment; Phase 12, 22 Aug
+2026, added the `pattern.undo` entry alongside registering it; 22 Aug 2026 added `piece.list`/
+`piece.dump` alongside registering those).
 
 **Example request:**
 ```json
@@ -333,24 +334,38 @@ own lookup).
 
 ### `render.snapshot`
 
-**Maps to:** no `Create()` call — rasterizes `ctx.scene()` via `QPainter`/`QImage::save()`.
-`src/libs/actionlayer/handlers/render_handlers.cpp:120`
+**Maps to:** no `Create()` call — rasterizes `ctx.scene()` (or, for `target: "piece"`, one
+piece's own graphics item within `ctx.pieceScene()`) via `QPainter`/`QImage::save()`.
+`src/libs/actionlayer/handlers/render_handlers.cpp:197`
 
 | Parameter | Type | Required | Literal / Formula | Description |
 |---|---|---|---|---|
 | `path` | string | yes | — | Output file path. Parent directory created if missing. |
-| `target` | string | no (default `"draft"`) | — | Which scene to render. `"draft"` is the *only* value currently accepted — `ActionContext` exposes no piece scene to `render.snapshot` yet (unlike the piece-assembly handlers, which use `ctx.pieceScene()` directly); anything else is a hard error, not a silent fallback. |
+| `target` | string | no (default `"draft"`) | — | Which scene to render. `"draft"` renders the whole draft scene, cropped to its content bounding box plus `padding` (the original behavior). `"piece"` renders a **tight crop of just one piece's own graphics item** — that item's `sceneBoundingRect()` plus `padding`, not `ctx.pieceScene()`'s own `itemsBoundingRect()`, which would include every other assembled piece too (pieces don't visually overlap there, each positioned at its own point coordinates, but rendering the whole scene would still show all of them at once) — requires `piece`. Anything else is a hard error, not a silent fallback. |
+| `piece` | string | required when `target` is `"piece"`; ignored otherwise | — | Name or numeric id of an existing piece (see `piece.list`). A JSON string is matched against `VPiece::GetName()`; a JSON number is taken as a literal piece id and checked against `VContainer::DataPieces()`. |
 | `format` | string | no | — | One of `PNG`/`JPG`/`BMP`/`TIF`/`PPM` (case-insensitive). Derived from `path`'s file extension if omitted; falls back to `PNG` if the extension is unrecognized/absent. |
 | `background` | string | no | — | `"transparent"`, `"white"`, or a `QColor`-parsable string (e.g. `"#RRGGBB"`). Default depends on `format`: transparent for PNG/TIF/PPM, white for JPG/BMP (matching Seamly2D's own export functions' own per-format defaults). |
 | `padding` | number | no (default `20.0`) | literal | Margin (scene units) added around the tight content bounding box on every side. |
 | `width` / `height` | number | no | literal | Explicit pixel dimensions. Both given: used verbatim (may distort aspect ratio, by design). One given: the other is derived from the content's aspect ratio. Neither given: renders 1:1 scene-unit-to-pixel, capped so the larger dimension never exceeds 4096px (memory-safety cap; scaled down preserving aspect ratio if exceeded). |
 | `highlight` | array of strings | no | — | Object names to overlay with a semi-transparent red rectangle. A name that fails to resolve, or resolves to an object with no live graphics item, is silently added to `skippedHighlights` (and logged via `qWarning`) rather than failing the whole render. |
-| `showPointNames` | boolean | no | literal | Forces point-name labels (e.g. `"A1"`, `"A2"`) on (`true`) or off (`false`) for this render only, overriding the scene-wide "hide point names" setting for the duration of this one call (the previous value is restored afterward — this never permanently changes the pattern's/session's settings). A point created with its own `"showPointName": false` (see `basePoint`/`endLine`/etc.) still never shows its label even when this is `true` — this only controls the scene-wide toggle, not any individual point's own flag. Omitted: leaves the scene-wide setting exactly as-is. **Note:** in the offscreen headless render path `actiond` always uses, labels only render as legible glyphs (not empty boxes) once a real font directory is available — `actiond`'s own `main.cpp` points `QT_QPA_FONTDIR` at the system font directory by default on Windows so this works out of the box; see that file's own comment if labels still render as boxes in a different environment. |
+| `showPointNames` | boolean | no | literal | Forces point-name labels (e.g. `"A1"`, `"A2"`) on (`true`) or off (`false`) for this render only, overriding the scene-wide "hide point names" setting for the duration of this one call (the previous value is restored afterward — this never permanently changes the pattern's/session's settings). A point created with its own `"showPointName": false` (see `basePoint`/`endLine`/etc.) still never shows its label even when this is `true` — this only controls the scene-wide toggle, not any individual point's own flag. Omitted: leaves the scene-wide setting exactly as-is. Works identically for both `target` values — this setting is scene-agnostic (a global `qApp->Settings()` flag every point's own paint code reads, regardless of which `QGraphicsScene` it happens to live in). **Note:** in the offscreen headless render path `actiond` always uses, labels only render as legible glyphs (not empty boxes) once a real font directory is available — `actiond`'s own `main.cpp` points `QT_QPA_FONTDIR` at the system font directory by default on Windows so this works out of the box; see that file's own comment if labels still render as boxes in a different environment. |
+
+`highlight` is always resolved against `Draw::Calculation`-scoped names (the same names
+`pattern.dump`'s `objects` array reports for the draft scene), so for `target: "piece"` a
+resolved name's live graphics item is almost always in the *draft* scene, not the piece scene
+actually being rendered — such a name is cleanly reported in `skippedHighlights` (not drawn at
+the wrong location) rather than silently misplaced; see the handler's own comment on the
+`item->scene() != scene` guard this relies on.
 
 **Example request:**
 ```json
 { "op": "render.snapshot", "path": "square.png", "width": 400, "height": 400,
   "highlight": ["A", "B"], "showPointNames": true }
+```
+
+**Example request (`target: "piece"`):**
+```json
+{ "op": "render.snapshot", "path": "square_piece.png", "target": "piece", "piece": "Square" }
 ```
 
 **Example success response:**
@@ -364,10 +379,17 @@ own lookup).
   "skippedHighlights": []
 }
 ```
+`piece` is only present in the response when `target` was `"piece"` — the resolved piece's own
+name, so a caller who passed a numeric id can see what it named.
 
-**Known error cases:** all plain-string — `"unsupported target"` (anything but `"draft"`),
-missing/empty `"path"`, `"unsupported format"`, `"unrecognized 'background' value"`, `"empty
-scene, nothing to render"` (`scene->items().isEmpty()`), `"could not create output directory"`,
+**Known error cases:** all plain-string except `unknownPiece` — `"unsupported target"` (anything
+but `"draft"`/`"piece"`), missing/empty `"path"`, missing `"piece"` when `target` is `"piece"`,
+`unknownPiece` (structured: `{"type": "unknownPiece", "message", "piece"}` — `target: "piece"`
+naming a piece that doesn't exist, mirroring `piece.dump`'s own error shape), `"has no graphics
+item to render"` (a resolved piece with no live `PatternPieceTool` instance — should not happen
+in practice), `"unsupported format"`, `"unrecognized 'background' value"`, `"empty scene, nothing
+to render"` (`target: "draft"` only — `scene->items().isEmpty()`; `target: "piece"` never reports
+this, a resolved piece's own item always has real bounds), `"could not create output directory"`,
 `"failed to save image to: <path>"` (`QImage::save()` returned false).
 
 ### `export.scene`
@@ -1338,6 +1360,93 @@ second, independent safety net). `piece.insertNodes` is the one op in this file 
 need this cloning step, since `PatternPieceTool::insertNodes()` calls `PrepareNode()` itself
 internally.
 
+### `piece.list`
+
+**Maps to:** no `Create()` call — reads `VContainer::DataPieces()` directly.
+`src/libs/actionlayer/handlers/piece_list_handler.cpp:39`
+
+Read-only (category `introspection`, grouped here by op-name prefix alongside the mutating
+`piece.*` ops rather than under [Read-only introspection](#read-only-introspection) above).
+Pieces are not `VGObject`s — `VContainer::DataPieces()` is a separate hash, keyed by id, from
+`DataGObjects()` — so `pattern.dump` never lists them at all; this is how a caller discovers
+which pieces exist (and their ids/names) before calling `piece.dump` or `render.snapshot`'s
+`target: "piece"`.
+
+Takes no parameters.
+
+**Example request:**
+```json
+{ "op": "piece.list" }
+```
+
+**Example success response:**
+```json
+{ "pieces": [ { "id": 37, "name": "Square", "nodeCount": 4, "seamAllowance": true } ] }
+```
+Sorted by id (same `QHash`-iteration-order determinism fix `pattern.dump`'s `objects` array
+needed — see [Findings](#findings)).
+
+**Known error cases:** none — always succeeds (an empty/unloaded context just yields an empty array).
+
+### `piece.dump`
+
+**Maps to:** no `Create()` call — reads `VPiece::GetPath()`/`getInternalPaths()`/`getAnchors()`
+and `VContainer::GetGObject()`/`getPiecePath()` directly.
+`src/libs/actionlayer/handlers/piece_dump_handler.cpp:172`
+
+Read-only (category `introspection`, same placement rationale as `piece.list` above).
+
+| Parameter | Type | Required | Literal / Formula | Description |
+|---|---|---|---|---|
+| `piece` | string or number | yes | — | Name or numeric id of an existing piece (see `piece.list`). A JSON string is matched by name; a JSON number is taken as a literal piece id. |
+
+**Example request:**
+```json
+{ "op": "piece.dump", "piece": "Square" }
+```
+
+**Example success response:**
+```json
+{
+  "id": 37, "name": "Square", "op": "piece.dump",
+  "seamAllowance": true, "seamAllowanceWidthFormula": "10",
+  "nodes": [
+    { "id": 12, "name": "__pieceNode_12", "type": "NodePoint", "reverse": false, "x": 0, "y": 0 }
+  ],
+  "internalPaths": [],
+  "anchors": [ { "id": 15, "name": "A", "x": 0, "y": 0 } ]
+}
+```
+`nodes` (the main outline path) and each `internalPaths[].nodes` entry report `{"id", "type",
+"reverse", "name"?, "x"?, "y"?, "unsupported"?}` — `"type"` is the node's own `Tool` enumerator
+name (`toolToString()`, shared with `pattern.dump`'s history entries rather than a second
+stringification of the same enum); `"name"`/`"x"`/`"y"` only appear when the underlying object
+resolves (and, for `"x"`/`"y"`, is itself a point) — note that a main-path/internal-path node's
+`"name"` is the **clone's** own mangled `"__pieceNode_<id>"` name (see the module note above), not
+the original draft point's name, since `piece.dump` reports `VGObject::name()` verbatim, the same
+choice `pattern.dump` already makes for every object (a round-trip caller should compare
+resolved `x`/`y` against the original point's own coordinates, not the node's `"name"`). `anchors`
+entries have no `"type"`/`"reverse"` (anchors are plain point-clone ids, not wrapped in a
+`VPieceNode`) and — unlike main-path/internal-path node clones — are **not** renamed, so an
+anchor's `"name"` matches whatever the original anchored point was named.
+
+`"unsupported": true` marks any node whose type this action layer's own `piece.addPatternPiece`/
+`piece.internalPath` cannot construct today (anything other than `"NodePoint"` — see the arc/curve
+node gap noted in the module comment above), or whose underlying object could not be resolved at
+all (`VContainer::GetGObject()`/`getPiecePath()` throwing `VExceptionBadId`) — reading such a node
+never crashes or silently drops it, it is always reported (`id`/`type`/`reverse` at minimum) with
+this flag set instead. **Confirmed against a real, GUI-authored multi-piece file** (an Aldrich
+block-style master pattern; see `tests/actionlayer/fixtures/patterns/`
+`Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d` and the `checkPieceDumpRealFile()` regression check in
+`tests/actionlayer/run_batch/main.cpp`) that reading a real `NodeArc`/`NodeSpline` main-path node
+neither crashes nor breaks the surrounding node list — only this action layer's own *creation*
+path is limited to plain point nodes, not reading an existing piece built by the interactive GUI.
+
+**Known error cases:** plain string for a missing `"piece"` argument or a missing data container;
+structured `unknownPiece` (`{"type","message","piece"}`, same shape `piece.addAnchorPoint`/
+`piece.internalPath`/`piece.insertNodes`/`piece.union` already use) for a `"piece"` that doesn't
+resolve to any known piece.
+
 ### `piece.addPatternPiece`
 
 **Maps to:** `PatternPieceTool::Create(...)` (id+`VPiece` overload) — `src/libs/vtools/tools/pattern_piece_tool.cpp:144`
@@ -1748,16 +1857,17 @@ implemented."
 Non-`VTool::Create()`-based introspection/session ops with no `Tool` enum counterpart at all:
 `pattern.dump`, `pattern.listMeasurements`, `pattern.listTools`, `pattern.resolveName`,
 `render.snapshot`, `export.scene`, `point.edit`, `measurements.load`, `measurements.recompute`,
-`measurements.sync`, `session.save`, `session.close`, `pattern.undo`.
+`measurements.sync`, `session.save`, `session.close`, `pattern.undo`, `piece.list`, `piece.dump`.
 
-**49 ops registered in `action_registry.cpp` total** (48 as of the 21 Aug 2026 export-effort
+**51 ops registered in `action_registry.cpp` total** (48 as of the 21 Aug 2026 export-effort
 refresh, plus `pattern.undo` added 22 Aug 2026 — Phase 12, undo, second design; see this doc's own
 `pattern.undo` entry above for why a first, `QUndoStack`-based design was built, then abandoned and
-replaced): 46 fully implemented and exercised successfully via a real `actiond` run at some point
-during development, 2 partial (`piece.union`, `piece.insertNodes`) with documented, reproduced
-gaps, and 1 partial (`export.scene`, only in the sense that its
-`ps`/`eps` formats depend on an external `pdftops` binary — every other format has no such
-dependency).
+replaced; plus `piece.list`/`piece.dump` added 22 Aug 2026 alongside `render.snapshot`'s `target:
+"piece"` extension — see [CHANGELOG.md](../CHANGELOG.md)): 48 fully implemented and exercised
+successfully via a real `actiond` run at some point during development, 2 partial (`piece.union`,
+`piece.insertNodes`) with documented, reproduced gaps, and 1 partial (`export.scene`, only in the
+sense that its `ps`/`eps` formats depend on an external `pdftops` binary — every other format has
+no such dependency).
 
 ## Findings
 

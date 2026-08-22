@@ -21,6 +21,8 @@ SOURCES += \
     $$PWD/handlers/cutpoint_handlers.cpp \
     $$PWD/handlers/operation_handlers.cpp \
     $$PWD/handlers/piece_handlers.cpp \
+    $$PWD/handlers/piece_list_handler.cpp \
+    $$PWD/handlers/piece_dump_handler.cpp \
     $$PWD/handlers/point_edit_handlers.cpp \
     $$PWD/handlers/session_handlers.cpp \
     $$PWD/handlers/history_undo_handlers.cpp
@@ -52,6 +54,8 @@ HEADERS += \
     $$PWD/handlers/cutpoint_handlers.h \
     $$PWD/handlers/operation_handlers.h \
     $$PWD/handlers/piece_handlers.h \
+    $$PWD/handlers/piece_list_handler.h \
+    $$PWD/handlers/piece_dump_handler.h \
     $$PWD/handlers/point_edit_handlers.h \
     $$PWD/handlers/session_handlers.h \
     $$PWD/handlers/history_undo_handlers.h

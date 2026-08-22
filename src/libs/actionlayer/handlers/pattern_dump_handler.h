@@ -28,8 +28,9 @@
 #include "../action_result.h" // Provides ActionResult, this handler's return type.
 
 #include "../../vgeometry/vgeometrydef.h" // Provides the GOType enum, goTypeToString()'s parameter type; trivial header (enums only), safe to include directly.
+#include "../../vmisc/def.h"              // Provides the Tool enum, toolToString()'s parameter type; trivial header (enums only), safe to include directly.
 
-#include <QString> // Provides QString, goTypeToString()'s return type.
+#include <QString> // Provides QString, goTypeToString()/toolToString()'s return type.
 
 class QJsonObject;   // Forward declaration; only used by const reference in the signature below.
 class ActionContext; // Forward declaration; only used by const reference in the signature below.
@@ -42,5 +43,12 @@ ActionResult handlePatternDump(const QJsonObject &args, const ActionContext &ctx
 // (rather than kept file-local) so "pattern.resolveName" can report the same type label pattern.dump
 // does, instead of a second, potentially-drifting stringification of the same enum.
 QString goTypeToString(GOType type); // Implemented in pattern_dump_handler.cpp.
+
+// Converts a Tool enumerator to its exact C++ name (e.g. Tool::NodeArc -> "NodeArc"). Exposed here
+// (rather than kept file-local, as it was before piece_dump_handler.cpp needed it) so "piece.dump"
+// can report the same per-node tool-type label pattern.dump's own history entries do, instead of a
+// second, potentially-drifting stringification of the same enum -- the exact rationale
+// goTypeToString() above already documents for GOType.
+QString toolToString(Tool tool); // Implemented in pattern_dump_handler.cpp.
 
 #endif // PATTERN_DUMP_HANDLER_H // End of include guard started above.

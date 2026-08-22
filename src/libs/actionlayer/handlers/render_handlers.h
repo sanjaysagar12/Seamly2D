@@ -30,10 +30,10 @@
 class QJsonObject;   // Forward declaration; only used by const reference in the signature below.
 class ActionContext; // Forward declaration; only used by const reference in the signature below.
 
-// Implements the "render.snapshot" op: rasterizes the current state of a VMainGraphicsScene
-// (currently only ctx.scene(), i.e. the draft scene -- ActionContext exposes no piece scene yet)
-// to an image file on disk, optionally highlighting named objects, and reports metadata about
-// what was rendered.
+// Implements the "render.snapshot" op: rasterizes the current state of a VMainGraphicsScene --
+// either ctx.scene() (the draft scene, target=="draft", the default) or, cropped to one named/id'd
+// piece's own graphics item within ctx.pieceScene() (target=="piece") -- to an image file on disk,
+// optionally highlighting named objects, and reports metadata about what was rendered.
 ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &ctx); // Implemented in render_handlers.cpp.
 
 #endif // RENDER_HANDLERS_H // End of include guard started above.

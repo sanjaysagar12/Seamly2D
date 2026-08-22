@@ -1,0 +1,13 @@
+{
+    "_description": "Demonstrates piece.list (discover every piece in a real, GUI-authored multi-piece pattern) and render.snapshot's \"target\": \"piece\" (a tight crop of just one piece's own outline) against Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d + Aldrich-Womens-MultiSize-06-14.smms. See README.md in this folder for the exact command used to produce output/response.json and output/*.png from this file.",
+    "actions": [
+        { "op": "piece.list" },
+        { "op": "render.snapshot", "path": "output/A-Skirt-Back.png", "target": "piece", "piece": "A - Skirt Back" },
+        { "op": "render.snapshot", "path": "output/A-Skirt-Front.png", "target": "piece", "piece": "A - Skirt Front" },
+        { "op": "render.snapshot", "path": "output/B-Trousers-Front.png", "target": "piece", "piece": "B - Trousers Front" },
+        { "op": "render.snapshot", "path": "output/B-Trousers-Back.png", "target": "piece", "piece": "B - Trousers Back" },
+        { "op": "render.snapshot", "path": "output/C-Bodice-Back.png", "target": "piece", "piece": "C - Bodice Back" },
+        { "op": "render.snapshot", "path": "output/C-Bodice-Front.png", "target": "piece", "piece": "C - Bodice Front" },
+        { "op": "render.snapshot", "path": "output/D-1-Piece-Sleeve.png", "target": "piece", "piece": "D - 1 Piece Sleeve" }
+    ]
+}

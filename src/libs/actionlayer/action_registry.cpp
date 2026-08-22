@@ -38,6 +38,8 @@
 #include "handlers/cutpoint_handlers.h"               // Brings in the ten Phase 8 cut/intersection point handle*() functions below.
 #include "handlers/operation_handlers.h"              // Brings in the six Phase 8 operation handle*() functions below (move, rotation, mirrorByLine, mirrorByAxis, group, trueDarts).
 #include "handlers/piece_handlers.h"                  // Brings in the five Phase 8 piece.* handle*() functions below.
+#include "handlers/piece_list_handler.h"                // Brings in handlePieceList(), registered under "piece.list".
+#include "handlers/piece_dump_handler.h"                // Brings in handlePieceDump(), registered under "piece.dump".
 #include "handlers/point_edit_handlers.h"              // Brings in handlePointEdit(), registered under "point.edit".
 #include "handlers/session_handlers.h"                 // Brings in handleSessionSave()/handleSessionClose(), registered under "session.save"/"session.close".
 #include "handlers/history_undo_handlers.h"             // Brings in handlePatternUndo(), registered under "pattern.undo" (Phase 12, second design).
@@ -120,13 +122,15 @@ void ActionRegistry::registerBuiltinActions()
 
     registerAction(QStringLiteral("render.snapshot"), &handleRenderSnapshot, buildSchema(
         QStringLiteral("render.snapshot"), QStringLiteral("introspection"),
-        QStringLiteral("Rasterizes the current draft scene to an image file, optionally highlighting named objects with a translucent overlay. Read-only with respect to pattern data; only writes the image file itself."),
+        QStringLiteral("Rasterizes either the current draft scene or one piece's own graphics item (see \"target\") to an image file, optionally highlighting named objects with a translucent overlay. Read-only with respect to pattern data; only writes the image file itself. Piece-target example: { \"op\": \"render.snapshot\", \"path\": \"square_piece.png\", \"target\": \"piece\", \"piece\": \"Square\" }."),
         {
             param(QStringLiteral("path"), QStringLiteral("string"), true,
                 QStringLiteral("Output file path. Parent directory created if missing.")),
             param(QStringLiteral("target"), QStringLiteral("string"), false,
-                QStringLiteral("Which scene to render. \"draft\" is the only value accepted today -- ActionContext exposes no piece scene to this op yet; anything else is a hard error, not a silent fallback."),
+                QStringLiteral("Which scene to render. \"draft\" renders the whole draft scene, cropped to its content bounding box plus \"padding\" (the pre-existing behavior). \"piece\" renders a tight crop of just one piece's own graphics item (its sceneBoundingRect() plus \"padding\", not the whole multi-piece piece scene) -- requires \"piece\". Anything else is a hard error, not a silent fallback. \"highlight\" is scoped to whichever scene is actually being rendered: a name whose live graphics item lives in the *other* scene is reported in \"skippedHighlights\" rather than drawn in the wrong place."),
                 QStringLiteral("draft")),
+            param(QStringLiteral("piece"), QStringLiteral("string"), false,
+                QStringLiteral("Required when \"target\" is \"piece\"; ignored otherwise. Name or numeric id of an existing piece (see piece.list) -- same name-or-id acceptance as piece.dump's own \"piece\" argument.")),
             param(QStringLiteral("format"), QStringLiteral("string"), false,
                 QStringLiteral("One of PNG/JPG/BMP/TIF/PPM (case-insensitive). Derived from \"path\"'s file extension if omitted; falls back to PNG if the extension is unrecognized/absent.")),
             param(QStringLiteral("background"), QStringLiteral("string"), false,
@@ -737,6 +741,21 @@ void ActionRegistry::registerBuiltinActions()
         QStringLiteral(R"({ "op": "trueDarts", "point1Name": "T1", "point2Name": "T2", "baseLineP1": "A", "baseLineP2": "B", "dartP1": "D1", "dartP2": "D2", "dartP3": "D3" })")));
 
     // ---- Pieces --------------------------------------------------------------------------------
+    registerAction(QStringLiteral("piece.list"), &handlePieceList, buildSchema(
+        QStringLiteral("piece.list"), QStringLiteral("introspection"),
+        QStringLiteral("Reads every pattern piece currently in the pattern's data container (id, name, main-path node count, seam allowance flag). Read-only; never mutates the pattern. Pieces are not VGObjects, so pattern.dump never lists them -- use this to discover which pieces exist before piece.dump/render.snapshot's \"target\": \"piece\"."),
+        {},
+        QStringLiteral(R"({ "op": "piece.list" })")));
+
+    registerAction(QStringLiteral("piece.dump"), &handlePieceDump, buildSchema(
+        QStringLiteral("piece.dump"), QStringLiteral("introspection"),
+        QStringLiteral("Reads one piece's main outline path, internal paths, and anchor points (node ids/types/resolved names/coordinates where applicable). Read-only; never mutates the pattern. A node whose type this action layer cannot construct via piece.addPatternPiece/piece.internalPath today (anything other than a plain point node) is still reported, flagged \"unsupported\": true, rather than dropped."),
+        {
+            param(QStringLiteral("piece"), QStringLiteral("string"), true,
+                QStringLiteral("Name or numeric id of an existing piece (see piece.list). A JSON string is matched by name; a JSON number is taken as a literal piece id.")),
+        },
+        QStringLiteral(R"({ "op": "piece.dump", "piece": "Square" })")));
+
     registerAction(QStringLiteral("piece.addPatternPiece"), &handlePieceAddPatternPiece, buildSchema(
         QStringLiteral("piece.addPatternPiece"), QStringLiteral("piece"),
         QStringLiteral("Closes a list of point names into one named pattern piece, with a formula seam-allowance width."),

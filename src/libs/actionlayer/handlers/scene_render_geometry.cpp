@@ -32,25 +32,31 @@
 // See scene_render_geometry.h for the full behavioral contract; this is render_handlers.cpp's
 // original render.snapshot sizing logic, extracted verbatim so export_handlers.cpp can reuse it
 // exactly rather than re-deriving (or subtly diverging from) the same padding/aspect-ratio rules.
+// Now a thin wrapper around computeRenderGeometryForRect() below, which render_handlers.cpp's
+// "target": "piece" support also calls directly against a single graphics item's bounds instead of
+// a whole scene's -- see that function's own header comment.
 SceneRenderGeometry computeSceneRenderGeometry(VMainGraphicsScene *scene, const QJsonObject &args, bool applyRasterCap)
 {
-    SceneRenderGeometry result; // Default-constructed: ok=false, until every check below passes.
-
     // items().isEmpty() (rather than itemsBoundingRect().isEmpty()) is the correct "truly nothing
     // to render" check: a single perfectly horizontal or vertical line item has a bounding rect
     // with zero width or height -- and QRectF::isEmpty() would then (wrongly) report the whole
     // scene as empty even though it has real content to draw.
     if (scene->items().isEmpty()) // No items at all: nothing meaningful can be rendered.
     {
-        return result; // ok stays false; caller reports "empty scene" itself with its own op-specific wording.
+        return SceneRenderGeometry(); // ok stays false; caller reports "empty scene" itself with its own op-specific wording.
     }
 
-    const qreal padding = args.value(QStringLiteral("padding")).toDouble(20.0); // Margin added around the content on every side.
-
-    const QRectF itemsRect = scene->itemsBoundingRect(); // Tight bounds of everything currently drawn, in scene coordinates.
     // itemsBoundingRect() (not sceneRect()) is used deliberately: sceneRect() reflects the
     // editor's configured/scrollable canvas size, which is usually much larger than the drawn
     // content and would produce a mostly-blank result; itemsBoundingRect() crops to what's actually there.
+    return computeRenderGeometryForRect(scene->itemsBoundingRect(), args, applyRasterCap);
+}
+
+SceneRenderGeometry computeRenderGeometryForRect(const QRectF &itemsRect, const QJsonObject &args, bool applyRasterCap)
+{
+    SceneRenderGeometry result; // Default-constructed: ok=false, overwritten to true just before returning below.
+
+    const qreal padding = args.value(QStringLiteral("padding")).toDouble(20.0); // Margin added around the content on every side.
     const QRectF sourceRect = itemsRect.adjusted(-padding, -padding, padding, padding); // Expand by padding on all four sides.
 
     const bool hasWidth = args.contains(QStringLiteral("width"));   // Caller supplied an explicit width.

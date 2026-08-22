@@ -75,6 +75,19 @@ namespace
         return suffix == QLatin1String("smis") || suffix == QLatin1String("smms") || suffix == QLatin1String("vst");
     }
 
+    // ".val" was the only recognized pattern extension until the real, GUI-authored
+    // fixtures/patterns/Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d was added (see
+    // checkPieceDumpRealFile() below) -- ".sm2d" is the same pattern XML schema VPattern::Parse()
+    // already reads regardless of extension (it is purely a file-picker/save-dialog naming
+    // convention, the same way ".val" itself is), so recognizing it here is not a format change,
+    // just letting single-case-mode's own extension classifier (below) accept a real .sm2d path the
+    // way it already accepts .val.
+    bool isPatternFile(const QString &path)
+    {
+        const QString suffix = QFileInfo(path).suffix().toLower();
+        return suffix == QLatin1String("val") || suffix == QLatin1String("sm2d");
+    }
+
     // Finds actiond.exe (or actiond on non-Windows): $ACTIOND_EXE if set, else walk upward from
     // this binary's own directory looking for an ancestor literally named "out" (the qmake build
     // output root every .pro in this repo builds into -- see build_actiond.bat), then descend into
@@ -619,6 +632,124 @@ namespace
                                "no --measurements still resolves \"shoulder_length\" to x=%1)\n").arg(originalA1.value(QStringLiteral("x")).toDouble());
         return true;
     }
+
+    // Regression coverage for "piece.list"/"piece.dump" against a real, GUI-authored, multi-piece
+    // master pattern (fixtures/patterns/Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d, paired with
+    // fixtures/measurements/Aldrich-Womens-MultiSize-06-14.smms) instead of a from-scratch fixture
+    // built entirely from actions in this same suite -- every scripts/*.json case builds its own
+    // geometry against fixtures/patterns/blank.val, which (like every other in-suite pattern) only
+    // ever has plain point-type piece nodes, so it cannot exercise the arc/curve piece-node reading
+    // path piece.dump documents a gap around (see piece_dump_handler.h's own doc comment). The
+    // Aldrich file's own "A - Skirt Front" piece has both: confirmed by hand (20 Aug 2026) to
+    // contain real NodeArc/NodeSpline main-path nodes alongside NodePoint ones (see e.g. node id 123
+    // "Spl_A16_A17a", type NodeSpline, in the underlying .sm2d's own <nodes> XML).
+    //
+    // This bespoke check exists (rather than a scripts/*.json case) because the no-args suite loop
+    // in main() below always pairs every scripts/*.json case with the *default* fixtures
+    // (blank.val/sample.smis, which have no pieces at all) -- there is no per-case fixture-override
+    // mechanism, matching checkMeasurementsPathRegression() above, which hits the same "needs
+    // different fixtures than the default loop provides" constraint and solves it the same way: a
+    // standalone function that calls runOneCase() directly with its own explicit pattern/
+    // measurements paths, with its own actions script built inline (not a scripts/*.json file, so it
+    // is never picked up by the directory-listing loop below).
+    bool checkPieceDumpRealFile(const QString &actiondExe)
+    {
+        const QString caseName = QStringLiteral("piece_dump_real_file");
+        const QString patternPath = kTestsDir + QStringLiteral("/fixtures/patterns/Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d");
+        const QString measurementsPath = kTestsDir + QStringLiteral("/fixtures/measurements/Aldrich-Womens-MultiSize-06-14.smms");
+        const QString caseOutputDir = outputDir() + QLatin1Char('/') + caseName;
+
+        QJsonObject listAction;
+        listAction[QStringLiteral("op")] = QStringLiteral("piece.list");
+        QJsonObject dumpAction;
+        dumpAction[QStringLiteral("op")] = QStringLiteral("piece.dump");
+        dumpAction[QStringLiteral("piece")] = QStringLiteral("A - Skirt Front"); // Real piece name confirmed present via a manual actiond run (20 Aug 2026) before writing this check.
+        QJsonObject script;
+        script[QStringLiteral("actions")] = QJsonArray{listAction, dumpAction};
+
+        QDir().mkpath(caseOutputDir);
+        const QString actionsPath = caseOutputDir + QStringLiteral("/actions.json");
+        if (!writeFile(actionsPath, QJsonDocument(script).toJson()))
+        {
+            err << QStringLiteral("[piece_dump_real_file] ERROR: could not write %1\n").arg(actionsPath);
+            return false;
+        }
+
+        const RunResult result = runOneCase(actiondExe, patternPath, measurementsPath, actionsPath, caseOutputDir);
+        if (!result.ranAtAll || result.exitCode != 0)
+        {
+            err << QStringLiteral("[piece_dump_real_file] ERROR: could not run against the real Aldrich fixture -- see %1/stderr.log\n").arg(caseOutputDir);
+            return false;
+        }
+
+        const QJsonArray results = result.response.object().value(QStringLiteral("results")).toArray();
+        if (results.size() != 2)
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: expected 2 results, got %1\n").arg(results.size());
+            return false;
+        }
+
+        const QJsonObject listResult = results.at(0).toObject();
+        if (!listResult.value(QStringLiteral("ok")).toBool())
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: piece.list did not succeed: %1\n")
+                       .arg(QString::fromUtf8(QJsonDocument(listResult.value(QStringLiteral("error")).toObject()).toJson(QJsonDocument::Compact)));
+            return false;
+        }
+        const QJsonArray pieces = listResult.value(QStringLiteral("value")).toObject().value(QStringLiteral("pieces")).toArray();
+        if (pieces.size() != 7) // The Aldrich fixture's own <piece> element count, confirmed by hand (20 Aug 2026); a mismatch here means either the fixture changed or piece.list's own logic regressed.
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: expected 7 pieces from piece.list against the real Aldrich fixture, got %1\n").arg(pieces.size());
+            return false;
+        }
+
+        const QJsonObject dumpResult = results.at(1).toObject();
+        if (!dumpResult.value(QStringLiteral("ok")).toBool())
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: piece.dump did not succeed: %1\n")
+                       .arg(QString::fromUtf8(QJsonDocument(dumpResult.value(QStringLiteral("error")).toObject()).toJson(QJsonDocument::Compact)));
+            return false;
+        }
+        const QJsonArray nodes = dumpResult.value(QStringLiteral("value")).toObject().value(QStringLiteral("nodes")).toArray();
+
+        // The two assertions below are the actual point of this check (see the module comment
+        // above): confirm piece.dump neither crashes nor silently drops a non-point main-path node
+        // from a real GUI-authored file, AND still resolves ordinary point nodes' coordinates
+        // normally alongside them in the same "nodes" array.
+        bool sawUnsupportedCurveNode = false;
+        bool sawResolvedPointNode = false;
+        for (const QJsonValue &nodeValue : nodes)
+        {
+            const QJsonObject node = nodeValue.toObject();
+            const QString type = node.value(QStringLiteral("type")).toString();
+            if ((type == QStringLiteral("NodeArc") || type == QStringLiteral("NodeSpline")) && node.value(QStringLiteral("unsupported")).toBool())
+            {
+                sawUnsupportedCurveNode = true;
+            }
+            if (type == QStringLiteral("NodePoint") && node.contains(QStringLiteral("x")) && node.contains(QStringLiteral("y")))
+            {
+                sawResolvedPointNode = true;
+            }
+        }
+        if (!sawUnsupportedCurveNode)
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: expected at least one \"unsupported\": true NodeArc/NodeSpline "
+                                   "entry in \"A - Skirt Front\"'s main-path nodes (this piece is known to have both -- see this "
+                                   "check's own module comment); either the fixture changed or piece.dump's arc/curve handling regressed\n");
+            return false;
+        }
+        if (!sawResolvedPointNode)
+        {
+            err << QStringLiteral("[piece_dump_real_file] FAIL: expected at least one resolved (x/y-bearing) NodePoint entry "
+                                   "alongside the unsupported curve nodes -- piece.dump should resolve what it can, not fail "
+                                   "the whole node list over the nodes it can't\n");
+            return false;
+        }
+
+        out << QStringLiteral("[piece_dump_real_file] PASS (7 pieces listed; \"A - Skirt Front\" dumped with %1 nodes, "
+                               "including both resolved points and unsupported curve nodes)\n").arg(nodes.size());
+        return true;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -668,12 +799,16 @@ int main(int argc, char *argv[])
             }
         }
 
-        const int totalChecks = scripts.size() + 2; // +1 for checkListToolsAi(), +1 for checkMeasurementsPathRegression() below -- both actiond-CLI checks independent of any single scripts/*.json case's own JSON diff.
+        const int totalChecks = scripts.size() + 3; // +1 for checkListToolsAi(), +1 for checkMeasurementsPathRegression(), +1 for checkPieceDumpRealFile() below -- all three actiond-CLI checks independent of any single scripts/*.json case's own JSON diff.
         if (checkListToolsAi(actiondExe))
         {
             ++passed;
         }
         if (checkMeasurementsPathRegression(actiondExe))
+        {
+            ++passed;
+        }
+        if (checkPieceDumpRealFile(actiondExe))
         {
             ++passed;
         }
@@ -691,7 +826,7 @@ int main(int argc, char *argv[])
         {
             actionsPath = a;
         }
-        else if (suffix == QLatin1String("val"))
+        else if (isPatternFile(a))
         {
             pattern = a;
         }
@@ -701,7 +836,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            err << QStringLiteral("ERROR: don't know how to classify argument (expected .val/.smis/.smms/.vst/.json): %1\n").arg(a);
+            err << QStringLiteral("ERROR: don't know how to classify argument (expected .val/.sm2d/.smis/.smms/.vst/.json): %1\n").arg(a);
             return 2;
         }
     }

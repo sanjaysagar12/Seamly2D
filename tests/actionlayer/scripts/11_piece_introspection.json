@@ -1,0 +1,29 @@
+{
+    "_description": "piece.list / piece.dump / render.snapshot's \"target\": \"piece\" (closes the render.snapshot \"no piece scene yet\" gap): builds two non-overlapping closed squares (SquareOne, SquareTwo) as separate pieces, adds a label anchor to SquareOne, then exercises piece.list (both pieces discoverable), piece.dump (round-trip: SquareOne's dumped main-path node coordinates must match points A/B/C/D's own coordinates from this same script, and its one anchor must resolve to point A), and render.snapshot target:\"piece\" against each piece in turn (each crop must show only that one piece, tight to its own bounds, not the other piece 400 scene units away).",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "C", "basePoint": "B", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "D", "basePoint": "A", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "line", "firstPoint": "B", "secondPoint": "C" },
+        { "op": "line", "firstPoint": "C", "secondPoint": "D" },
+        { "op": "line", "firstPoint": "D", "secondPoint": "A" },
+        { "op": "endLine", "name": "E", "basePoint": "B", "length": "300", "angle": "0" },
+        { "op": "endLine", "name": "F", "basePoint": "E", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "G", "basePoint": "F", "length": "100", "angle": "90" },
+        { "op": "endLine", "name": "H", "basePoint": "E", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "E", "secondPoint": "F" },
+        { "op": "line", "firstPoint": "F", "secondPoint": "G" },
+        { "op": "line", "firstPoint": "G", "secondPoint": "H" },
+        { "op": "line", "firstPoint": "H", "secondPoint": "E" },
+        { "op": "piece.addPatternPiece", "name": "SquareOne", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10" },
+        { "op": "piece.addPatternPiece", "name": "SquareTwo", "nodes": ["E", "F", "G", "H"], "seamAllowanceWidth": "10" },
+        { "op": "piece.addAnchorPoint", "point": "A", "piece": "SquareOne" },
+        { "op": "piece.list" },
+        { "op": "piece.dump", "piece": "SquareOne" },
+        { "op": "piece.dump", "piece": "SquareTwo" },
+        { "op": "render.snapshot", "path": "piece_square_one.png", "target": "piece", "piece": "SquareOne" },
+        { "op": "render.snapshot", "path": "piece_square_two.png", "target": "piece", "piece": "SquareTwo" }
+    ]
+}
