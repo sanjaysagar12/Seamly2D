@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { listMeasurements, listModels, listSessions, startSession, uploadMeasurement } from '../lib/api'
+import {
+  listMeasurements,
+  listModels,
+  listPatterns,
+  listSessions,
+  startSession,
+  uploadMeasurement,
+  uploadPattern,
+} from '../lib/api'
 import type { ModelOption, SessionSummary } from '../lib/types'
 import { STOP_REASON_LABELS } from '../lib/types'
 import './StartScreen.css'
@@ -27,6 +35,8 @@ export function StartScreen({ onStarted }: Props) {
   const [goal, setGoal] = useState('')
   const [measurements, setMeasurements] = useState<string[]>([])
   const [selected, setSelected] = useState<string>('')
+  const [patterns, setPatterns] = useState<string[]>([])
+  const [selectedPattern, setSelectedPattern] = useState<string>('')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [systemPrompt, setSystemPrompt] = useState('')
@@ -37,6 +47,7 @@ export function StartScreen({ onStarted }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const patternInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listMeasurements()
@@ -44,6 +55,15 @@ export function StartScreen({ onStarted }: Props) {
         setMeasurements(files)
         if (files.length > 0) setSelected(files[0])
       })
+      .catch((err) => setError(String(err)))
+  }, [])
+
+  useEffect(() => {
+    // Left unselected by default, unlike measurements -- omitting --pattern is a
+    // supported, meaningful choice (actiond starts from an empty pattern), not just
+    // "no file uploaded yet".
+    listPatterns()
+      .then((files) => setPatterns(files))
       .catch((err) => setError(String(err)))
   }, [])
 
@@ -88,6 +108,20 @@ export function StartScreen({ onStarted }: Props) {
     }
   }
 
+  async function handleUploadPattern(file: File) {
+    setBusy(true)
+    setError(null)
+    try {
+      const filename = await uploadPattern(file)
+      setPatterns((prev) => (prev.includes(filename) ? prev : [...prev, filename]))
+      setSelectedPattern(filename)
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleStart() {
     if (!goal.trim()) {
       setError('Describe what you want drafted first.')
@@ -99,6 +133,7 @@ export function StartScreen({ onStarted }: Props) {
       const { sessionId } = await startSession({
         goal: goal.trim(),
         measurementsFilename: selected || undefined,
+        patternFilename: selectedPattern || undefined,
         stepLimit,
         autorun,
         model: selectedModel || undefined,
@@ -146,6 +181,43 @@ export function StartScreen({ onStarted }: Props) {
 
         <div className="field-row">
           <div className="field-col">
+            <label className="field-label" htmlFor="pattern">
+              Base pattern (optional)
+            </label>
+            <select
+              id="pattern"
+              value={selectedPattern}
+              onChange={(e) => setSelectedPattern(e.target.value)}
+            >
+              <option value="">Start from an empty pattern</option>
+              {patterns.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => patternInputRef.current?.click()}
+              disabled={busy}
+            >
+              + upload .val / .sm2d
+            </button>
+            <input
+              ref={patternInputRef}
+              type="file"
+              accept=".val,.sm2d"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void handleUploadPattern(file)
+                e.target.value = ''
+              }}
+            />
+          </div>
+
+          <div className="field-col">
             <label className="field-label" htmlFor="measurements">
               Measurement file
             </label>
@@ -182,7 +254,9 @@ export function StartScreen({ onStarted }: Props) {
               }}
             />
           </div>
+        </div>
 
+        <div className="field-row">
           <div className="field-col field-col-model">
             <label className="field-label" htmlFor="model">
               Model

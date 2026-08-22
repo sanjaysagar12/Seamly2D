@@ -28,6 +28,7 @@ FRONTEND_DIST_DIR = Path(
 
 DATA_DIR = Path(os.environ.get("PATTERN_AGENT_DATA_DIR", str(BACKEND_DIR / "data")))
 MEASUREMENTS_DIR = DATA_DIR / "measurements"
+PATTERNS_DIR = DATA_DIR / "patterns"
 SESSIONS_DIR = DATA_DIR / "sessions"
 DB_PATH = Path(os.environ.get("PATTERN_AGENT_DB_PATH", str(DATA_DIR / "pattern_agent.db")))
 
@@ -54,4 +55,5 @@ ACTIOND_STARTUP_TIMEOUT = float(os.environ.get("ACTIOND_STARTUP_TIMEOUT", "15"))
 ACTIOND_ACTION_TIMEOUT = float(os.environ.get("ACTIOND_ACTION_TIMEOUT", "30"))
 
 MEASUREMENTS_DIR.mkdir(parents=True, exist_ok=True)
+PATTERNS_DIR.mkdir(parents=True, exist_ok=True)
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
