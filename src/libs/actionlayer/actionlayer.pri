@@ -23,7 +23,7 @@ SOURCES += \
     $$PWD/handlers/piece_handlers.cpp \
     $$PWD/handlers/point_edit_handlers.cpp \
     $$PWD/handlers/session_handlers.cpp \
-    $$PWD/handlers/session_undo_handlers.cpp
+    $$PWD/handlers/history_undo_handlers.cpp
 
 *msvc*:SOURCES += $$PWD/stable.cpp
 
@@ -54,4 +54,4 @@ HEADERS += \
     $$PWD/handlers/piece_handlers.h \
     $$PWD/handlers/point_edit_handlers.h \
     $$PWD/handlers/session_handlers.h \
-    $$PWD/handlers/session_undo_handlers.h
+    $$PWD/handlers/history_undo_handlers.h

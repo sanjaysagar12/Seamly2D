@@ -1,0 +1,19 @@
+{
+    "_description": "Phase 12 (second design) pattern.undo regression case, against fixtures/patterns/blank.val. Same-process coverage only -- see CHANGELOG.md's Phase 12 entry for the cross-process (save -> fresh process reload -> undo past the save boundary) scenario this op exists for, verified separately via direct actiond runs since the run_batch harness format is single-script/same-process. Exercises: a Tool::Piece entry correctly reversed via DeletePiece (not DelTool), including the piece's own modeling-scope node clones reverting their in-memory-only '__pieceNode_N' rename back to their real name once the piece's DOM element is gone (confirming that rename is never written to the saved XML in the first place -- see piece_handlers.cpp's own comment on this); pattern.undo immediately followed by pattern.dump in the SAME script correctly seeing the already-pruned state (this is the exact bug this test would catch if the per-action reparse hook ever regressed to an end-of-batch-only reparse -- see action_engine.h's own AfterActionFn comment); a Tool::BasePoint entry correctly reversed via DeleteDraftBlock, tearing down the whole draft block (and everything still in it) with no crash and no orphaned entries; count exceeding available history (a clean partial result, not an error); count: 0 and omitted count on an exhausted history (both a clean, explicit undone: 0, not an error).",
+    "actions": [
+        { "op": "basePoint", "name": "A", "x": 0, "y": 0, "draftBlock": "Front" },
+        { "op": "endLine", "name": "B", "basePoint": "A", "length": "100", "angle": "0" },
+        { "op": "endLine", "name": "C", "basePoint": "A", "length": "100", "angle": "90" },
+        { "op": "line", "firstPoint": "A", "secondPoint": "B" },
+        { "op": "line", "firstPoint": "B", "secondPoint": "C" },
+        { "op": "line", "firstPoint": "C", "secondPoint": "A" },
+        { "op": "piece.addPatternPiece", "name": "MyPiece", "nodes": ["A", "B", "C"], "seamAllowanceWidth": "1" },
+        { "op": "pattern.dump" },
+        { "op": "pattern.undo", "count": 1 },
+        { "op": "pattern.dump" },
+        { "op": "pattern.undo", "count": 100 },
+        { "op": "pattern.dump" },
+        { "op": "pattern.undo", "count": 0 },
+        { "op": "pattern.undo" }
+    ]
+}

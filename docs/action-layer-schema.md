@@ -286,10 +286,9 @@ An empty array is a valid, non-error result for a pattern with no measurements a
 
 Takes no parameters. **Must be kept in sync by hand** with `action_registry.cpp`'s registration
 list — it is not derived from the registry at runtime (its own header comment says so explicitly).
-Verified during this refresh: it currently lists all 51 registered ops correctly (was previously
+Verified during this refresh: it currently lists all 49 registered ops correctly (was previously
 found out of sync with Phase 8's additions and backfilled 20 Aug 2026, per its own in-file
-changelog comment; Phase 12, 22 Aug 2026, added the three `session.undo`/`session.redo`/
-`session.undoStatus` entries alongside registering them).
+changelog comment; Phase 12, 22 Aug 2026, added the `pattern.undo` entry alongside registering it).
 
 **Example request:**
 ```json
@@ -1631,96 +1630,62 @@ loop) so it participates in ordinary results/`appliedCount` bookkeeping and show
 
 **Known error cases:** none — always succeeds.
 
-### `session.undo`
+## Undo
 
-**Maps to:** no `VTool::Create()` — `qApp->getUndoStack()->undo()`, called up to `"count"` times.
-`src/libs/actionlayer/handlers/session_undo_handlers.cpp:70`
+### `pattern.undo`
 
-| Parameter | Type | Required | Literal / Formula | Description |
-|---|---|---|---|---|
-| `count` | number | no (default 1) | Literal | How many steps to undo. 0 is a valid no-op; negative is a hard error. Stops early, without erroring, once nothing is left to undo. |
+**Maps to:** no single `VTool::Create()` — reverses `doc->getHistory()`'s tail, most-recently-
+created entry first, via `DelTool`/`DeletePiece`/`DeleteDraftBlock` (matched per entry's `Tool`
+type), called directly (not pushed onto any `QUndoStack`).
+`src/libs/actionlayer/handlers/history_undo_handlers.cpp:118`
 
-**Example request:**
-```json
-{ "op": "session.undo" }
-```
-
-**Example success response:**
-```json
-{ "undone": 1, "canUndo": true, "canRedo": true, "index": 4, "count": 5 }
-```
-
-**Known error cases:** a plain string for a negative `"count"`. An empty stack is **not** an error —
-it returns `{"undone": 0, ...}`.
-
-**CRITICAL, VERIFIED GAP — read before relying on this for anything beyond controlling
-`session.save`'s output:** undoing an object's *creation* (`basePoint`/`line`/`endLine`/every other
-`Create()`-based op) correctly rewrites the DOM but does **not** remove the object from the live
-`VContainer`/scene — there is no delete/prune mechanism anywhere in this codebase yet (the same gap
-Phase 9 already documented for explicit deletion). Reproduced directly: after undoing every action
-in a script, `pattern.dump`/`render.snapshot`/`pattern.resolveName` still report the "undone"
-objects unchanged, and creating a new object with the same name succeeds instead of being rejected
-— the next action that references that name by name then fails with a structured `"duplicate"`
-nameResolution error, because both the stale and the fresh object are now live. A `session.save`
-issued right after the undo **does** write a correctly smaller `.val` file — the DOM-level undo
-itself is genuinely correct. By contrast, undoing an in-place *edit* (`point.edit`) is **not**
-affected by this gap and correctly reverts live geometry too. See
-`src/libs/actionlayer/handlers/session_undo_handlers.h`'s own header comment and
-`tests/actionlayer/scripts/10_undo_redo.json` for the full writeup and a golden-file reproduction.
-
-### `session.redo`
-
-**Maps to:** no `VTool::Create()` — `qApp->getUndoStack()->redo()`, called up to `"count"` times.
-`src/libs/actionlayer/handlers/session_undo_handlers.cpp:90`
+**Design note — read this before using this op:** this replaced an earlier, abandoned
+`QUndoStack`-based `session.undo`/`session.redo`/`session.undoStatus` design. That design's
+`QUndoCommand` objects hold live pointers into one process's in-memory `VPattern`/`VContainer`, so
+they cannot survive `session.save` → process exit → a new process reloading the file — which
+defeats the point for an AI caller working across separate `actiond` invocations against the same
+saved pattern. `pattern.undo` instead works at the DOM/history level: its effect is exactly what a
+subsequent `session.save` writes, with no live-vs-saved distinction to get wrong. The trade-off is
+explicit and permanent: **`pattern.undo` is one-directional — there is no `pattern.redo`.**
+Verified directly (three separate `actiond` processes: build `A`+`B`, save, exit; reload, build
+more, save, exit; reload fresh, `pattern.undo` back past the first save's boundary) — the reverted
+pattern's `pattern.dump` and re-saved `.val` file were confirmed byte-identical to the first save.
 
 | Parameter | Type | Required | Literal / Formula | Description |
 |---|---|---|---|---|
-| `count` | number | no (default 1) | Literal | How many steps to redo. 0 is a valid no-op; negative is a hard error. Stops early, without erroring, once nothing is left to redo. Standard `QUndoStack` behavior: pushing any new mutating action after an undo discards every redo entry that came after it. |
+| `count` | number | no (default 1) | Literal | How many history entries to undo, most-recently-created first. 0 is a valid no-op; negative is a hard error. Stops early, without erroring, once history is exhausted. |
 
 **Example request:**
 ```json
-{ "op": "session.redo" }
+{ "op": "pattern.undo", "count": 2 }
 ```
 
 **Example success response:**
 ```json
-{ "redone": 1, "canUndo": true, "canRedo": false, "index": 5, "count": 5 }
+{ "undone": 2, "remaining": 1, "entries": [ { "id": 3, "kind": "tool" }, { "id": 2, "kind": "tool" } ] }
 ```
+`"entries"` lists what was actually removed, most-recent first; `"kind"` is `"tool"` (the common
+case — points, lines, curves, cut-points, operations, and modeling-scope entries like
+`InternalPath`/`AnchorPoint`/`NodePoint`), `"piece"` (a `piece.addPatternPiece` entry, reversed via
+`DeletePiece`), or `"draftBlock"` (a `basePoint` entry, reversed via `DeleteDraftBlock` — this tears
+down the *whole* draft block that `basePoint` action created, not just its one point).
 
-**Known error cases:** a plain string for a negative `"count"`. An already-fully-redone stack is
-**not** an error — it returns `{"redone": 0, ...}`.
+**Safety property this relies on:** Seamly2D's pattern format only lets a formula reference an
+object that already existed when the referencing tool was created, so undoing strictly
+most-recently-created-first can never hit an object something else still depends on. This op always
+walks the history tail in that order and never reorders it — do not assume a "delete this specific
+id, skip dependents" mode exists; it doesn't, by design.
 
-### `session.undoStatus`
+**KNOWN GAP:** `group` (`operation_handlers.cpp`) and `piece.insertNodes` (`piece_handlers.cpp`)
+build their DOM directly without ever calling `VAbstractTool::AddRecord()`, so neither has any entry
+in `doc->getHistory()` at all — `pattern.undo` has no way to reach either op's effect; `"count"`
+silently counts past it onto an older entry instead. This is a pre-existing gap in what
+`doc->getHistory()` itself tracks, not something `pattern.undo` introduces.
 
-**Maps to:** no `VTool::Create()` — read-only introspection over `qApp->getUndoStack()`.
-`src/libs/actionlayer/handlers/session_undo_handlers.cpp:112`
-
-Takes no parameters. Read-only; never opens an undo macro itself.
-
-**Example request:**
-```json
-{ "op": "session.undoStatus" }
-```
-
-**Example success response:**
-```json
-{
-  "canUndo": true,
-  "canRedo": false,
-  "index": 3,
-  "count": 3,
-  "labels": [
-    { "index": 0, "label": "basePoint(A)", "applied": true },
-    { "index": 1, "label": "endLine(B)", "applied": true },
-    { "index": 2, "label": "line", "applied": true }
-  ]
-}
-```
-`"labels"` is a bounded window (5 entries before/5 after the current `"index"`, not the whole
-stack). `"applied": true` means that step is currently in effect (a `session.undo` would revert
-it); `false` means it is currently reverted or never redone (a `session.redo` would reapply it).
-
-**Known error cases:** none — always succeeds.
+**Known error cases:** a plain string for a negative `"count"`; a structured
+`{"type":"undoInconsistency",...}` object (should not occur in normal use — see this op's own
+implementation comment) if a history entry's id is already gone from live pattern state when this
+op tries to reverse it.
 
 ## Coverage summary
 
@@ -1783,18 +1748,16 @@ implemented."
 Non-`VTool::Create()`-based introspection/session ops with no `Tool` enum counterpart at all:
 `pattern.dump`, `pattern.listMeasurements`, `pattern.listTools`, `pattern.resolveName`,
 `render.snapshot`, `export.scene`, `point.edit`, `measurements.load`, `measurements.recompute`,
-`measurements.sync`, `session.save`, `session.close`, `session.undo`, `session.redo`,
-`session.undoStatus`.
+`measurements.sync`, `session.save`, `session.close`, `pattern.undo`.
 
-**51 ops registered in `action_registry.cpp` total** (48 as of the 21 Aug 2026 export-effort
-refresh, plus `session.undo`/`session.redo`/`session.undoStatus` added 22 Aug 2026 — Phase 12,
-undo/redo): 45 fully implemented and exercised successfully via a real `actiond` run at some point
+**49 ops registered in `action_registry.cpp` total** (48 as of the 21 Aug 2026 export-effort
+refresh, plus `pattern.undo` added 22 Aug 2026 — Phase 12, undo, second design; see this doc's own
+`pattern.undo` entry above for why a first, `QUndoStack`-based design was built, then abandoned and
+replaced): 46 fully implemented and exercised successfully via a real `actiond` run at some point
 during development, 2 partial (`piece.union`, `piece.insertNodes`) with documented, reproduced
-gaps, 1 partial (`export.scene`, only in the sense that its `ps`/`eps` formats depend on an
-external `pdftops` binary — every other format has no such dependency), and 3 new ops
-(`session.undo`/`session.redo`/`session.undoStatus`) fully implemented and exercised via a real
-`actiond` run, but carrying their own documented, reproduced gap: undoing an object's *creation*
-does not prune the live `VContainer` (see `session.undo`'s own entry above for the full writeup).
+gaps, and 1 partial (`export.scene`, only in the sense that its
+`ps`/`eps` formats depend on an external `pdftops` binary — every other format has no such
+dependency).
 
 ## Findings
 

@@ -26,9 +26,9 @@
 #define ACTION_ENGINE_H // Marks ACTION_ENGINE_H as defined for the remainder of the include guard.
 
 #include <QJsonDocument> // Provides QJsonDocument, both the script parameter's and run()'s return type.
-#include <QString>       // Provides QString, the label type passed to BeginMutatingActionFn.
+#include <QString>       // Provides QString, the op-name type passed to AfterActionFn.
 
-#include <functional> // Provides std::function, the callback types below.
+#include <functional> // Provides std::function, AfterActionFn's underlying type.
 
 class ActionRegistry; // Forward declaration; only a reference to it is stored here.
 class ActionContext;  // Forward declaration; only a const reference to it is passed to run().
@@ -40,18 +40,23 @@ public:
     // Constructor stores a reference to the registry actions will be looked up in.
     explicit ActionEngine(ActionRegistry &registry); // Implemented in action_engine.cpp.
 
-    // Phase 12 (undo/redo): optional hooks run() calls immediately before/after dispatching a
-    // handler whose ActionSchema::mutatesPattern is true (see action_schema.h) -- never around a
-    // read-only or session-lifecycle op. Plain std::function, not a QUndoStack-specific type or
-    // signature, so ActionEngine itself stays free of any qApp/QUndoStack dependency; the one
-    // real caller that supplies non-empty callbacks (PatternSession::runActions(),
-    // pattern_session.cpp) is the only place that actually touches qApp->getUndoStack() --
-    // matching the same "keep ActionEngine decoupled" invariant this module has held since Phase
-    // 0 (see docs/ARCHITECTURE.md). beginMutatingAction receives a short diagnosable label (op
-    // name plus, where available, an identifying field's value, e.g. `basePoint("A")`); intended
-    // for `QUndoStack::beginMacro(label)`, surfaced later via "session.undoStatus"'s label window.
-    using BeginMutatingActionFn = std::function<void(const QString &label)>;
-    using EndMutatingActionFn = std::function<void()>;
+    // Phase 12: optional hook run() calls immediately after each action's result is recorded, with
+    // the op name and whether it succeeded -- before the loop moves on to the next action in the
+    // same script. Plain std::function, not a VPattern/qApp-specific signature, so ActionEngine
+    // itself stays free of any dependency beyond ActionRegistry/ActionContext (matching the same
+    // "keep this module decoupled" invariant docs/ARCHITECTURE.md's ADR already holds). The one
+    // real caller that supplies a non-empty callback is PatternSession::runActions()
+    // (src/app/actiond/pattern_session.cpp): "pattern.undo" (history_undo_handlers.cpp) only
+    // removes DOM elements -- it cannot itself trigger the VPattern::Parse(Document::FullParse)
+    // that makes those removals visible to VContainer/the scenes (VPattern::Parse() is not
+    // reachable through the VAbstractPattern* pointer handlers are given -- see history_undo_handlers.h's own
+    // header comment for why) -- so PatternSession's callback does that reparse right here, immediately,
+    // rather than once at the very end of the whole script. That immediacy is load-bearing, not a
+    // style choice: a later action in the SAME script (e.g. a "pattern.dump" right after a
+    // "pattern.undo") must see the already-pruned state, not whatever was live before the reparse
+    // -- deferring the reparse to end-of-batch was tried first and empirically failed exactly this
+    // case (verified via a real actiond run during development; see CHANGELOG.md's Phase 12 entry).
+    using AfterActionFn = std::function<void(const QString &op, bool ok)>;
 
     // Parses the top-level {"actions": [{"op": "...", ...}, ...]} script, dispatches each entry
     // through the registry, and returns {"results": [...]} with one entry per action, in order.
@@ -64,13 +69,11 @@ public:
     // "keep going" behavior remains what every one-shot actiond script and ActionLayerTest fixture
     // already relies on.
     //
-    // beginMutatingAction/endMutatingAction default to empty (falsy) std::functions, so every
-    // pre-existing call site (every ActionLayerTest fixture, which calls engine.run(script, ctx)
-    // with no macro-grouping at all) keeps compiling and behaving identically -- no QUndoStack
-    // macro is opened unless a caller explicitly supplies both callbacks.
+    // afterAction defaults to an empty (falsy) std::function, so every pre-existing call site
+    // (every ActionLayerTest fixture, which calls engine.run(script, ctx) with no hook at all)
+    // keeps compiling and behaving identically.
     QJsonDocument run(const QJsonDocument &script, const ActionContext &ctx, bool abortOnFirstError = false,
-                       const BeginMutatingActionFn &beginMutatingAction = BeginMutatingActionFn(),
-                       const EndMutatingActionFn &endMutatingAction = EndMutatingActionFn()); // Implemented in action_engine.cpp.
+                       const AfterActionFn &afterAction = AfterActionFn()); // Implemented in action_engine.cpp.
 
 private:
     ActionRegistry &m_registry; // Reference to the registry supplied at construction; not owned by ActionEngine.

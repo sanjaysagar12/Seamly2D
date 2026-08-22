@@ -76,20 +76,6 @@ struct ActionSchema
     // than silently listing the op as if it were fully reliable.
     bool partial = false;
     QString partialReason; // Human-readable reason, only meaningful when partial == true.
-
-    // Phase 12: true for every op whose handler can mutate the pattern (DOM, VContainer, or both),
-    // false for a pure-introspection op ("pattern.dump", "render.snapshot", ...) or a session-
-    // lifecycle op ("session.save", "session.close", "session.undo", "session.redo",
-    // "session.undoStatus"). Derived automatically from `category` in action_registry.cpp's
-    // buildSchema() -- category == "introspection" or "session" means false, everything else means
-    // true -- rather than set per-op here, so this cannot silently drift out of sync with a new
-    // op's category the way pattern_list_tools_handler.cpp's hand-written mirror list once did (see
-    // this file's own "Findings" section in docs/action-layer-schema.md). PatternSession::
-    // runActions() reads this to decide whether to open a QUndoStack macro around one JSON action's
-    // handler call (see pattern_session.cpp's own comment for why "session" is excluded even though
-    // session.save/close *could* be argued to mutate something -- their effects are not
-    // undo-tracked, so wrapping them would only add an empty, misleading macro entry).
-    bool mutatesPattern = false;
 };
 
 #endif // ACTION_SCHEMA_H // End of include guard started above.
