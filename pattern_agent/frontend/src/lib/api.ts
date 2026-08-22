@@ -24,6 +24,19 @@ export async function uploadMeasurement(file: File): Promise<string> {
   return data.filename
 }
 
+export async function renameMeasurement(filename: string, newFilename: string): Promise<string> {
+  const data = await req<{ filename: string }>(`/api/measurements/${encodeURIComponent(filename)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newFilename }),
+  })
+  return data.filename
+}
+
+export async function deleteMeasurement(filename: string): Promise<void> {
+  await req(`/api/measurements/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+}
+
 export async function listPatterns(): Promise<string[]> {
   const data = await req<{ files: string[] }>('/api/patterns')
   return data.files
@@ -37,6 +50,19 @@ export async function uploadPattern(file: File): Promise<string> {
     body: form,
   })
   return data.filename
+}
+
+export async function renamePattern(filename: string, newFilename: string): Promise<string> {
+  const data = await req<{ filename: string }>(`/api/patterns/${encodeURIComponent(filename)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newFilename }),
+  })
+  return data.filename
+}
+
+export async function deletePattern(filename: string): Promise<void> {
+  await req(`/api/patterns/${encodeURIComponent(filename)}`, { method: 'DELETE' })
 }
 
 export async function listPatternPieces(filename: string, measurementsFilename?: string): Promise<PieceInfo[]> {
@@ -95,6 +121,10 @@ export async function listSessions(): Promise<SessionSummary[]> {
   return data.sessions
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  await req(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+}
+
 export async function stopSession(sessionId: string): Promise<void> {
   await req(`/api/sessions/${sessionId}/stop`, { method: 'POST' })
 }
@@ -121,7 +151,7 @@ export async function sendMessage(sessionId: string, text: string): Promise<void
 // ("drop the override, fall back to the SDK's own credential resolution"), not a no-op.
 export async function updateSessionSettings(
   sessionId: string,
-  params: { model?: string; apiKey?: string; systemPrompt?: string },
+  params: { model?: string; apiKey?: string; systemPrompt?: string; goal?: string },
 ): Promise<void> {
   await req(`/api/sessions/${sessionId}/settings`, {
     method: 'POST',

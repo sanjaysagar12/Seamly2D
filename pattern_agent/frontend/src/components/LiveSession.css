@@ -209,6 +209,42 @@
   color: var(--err);
 }
 
+.settings-danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-danger-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--err);
+  opacity: 0.85;
+}
+
+.danger-outline {
+  background: none;
+  border: 1px solid rgba(242, 118, 90, 0.4);
+  color: var(--err);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.danger-outline:hover:not(:disabled) {
+  background: var(--err-soft);
+}
+
+.danger-outline:disabled {
+  opacity: 0.5;
+}
+
 .stop-banner,
 .error-banner {
   padding: 10px 28px;
@@ -247,30 +283,80 @@
 }
 
 .piece-switcher {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .piece-switcher .field-label {
-  margin-bottom: 0;
-  white-space: nowrap;
+  margin-bottom: 8px;
 }
 
-.piece-switcher select {
-  flex: 0 0 auto;
-  min-width: 180px;
+.piece-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.piece-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+
+.piece-chip:hover {
+  border-color: var(--ink-faint);
+  color: var(--ink);
+}
+
+.piece-chip-active {
+  background: var(--accent-soft);
+  border-color: rgba(255, 157, 61, 0.5);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.piece-chip-focus-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--ok-soft);
 }
 
 .piece-switcher-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11.5px;
   color: var(--ink-faint);
+  margin-top: 8px;
 }
 
 .piece-switcher-error {
+  display: block;
   font-size: 11.5px;
   color: var(--err);
+  margin-top: 8px;
+}
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .snapshot-frame {

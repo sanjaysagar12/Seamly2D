@@ -71,6 +71,64 @@ async def test_measurement_list_ignores_non_measurement_files(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_measurement_rename_and_delete(tmp_path, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "MEASUREMENTS_DIR", tmp_path)
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.config, "MEASUREMENTS_DIR", tmp_path)
+
+    (tmp_path / "old.smis").write_text("<measurements individual=\"true\"></measurements>")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.patch("/api/measurements/old.smis", json={"newFilename": "new.smis"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["filename"] == "new.smis"
+        assert not (tmp_path / "old.smis").exists()
+        assert (tmp_path / "new.smis").exists()
+
+        # Renaming to an unsupported extension is rejected, and to an already-taken
+        # name is rejected too (never silently overwrites).
+        (tmp_path / "other.smis").write_text("<measurements individual=\"true\"></measurements>")
+        resp = await client.patch("/api/measurements/new.smis", json={"newFilename": "bad.txt"})
+        assert resp.status_code == 400
+        resp = await client.patch("/api/measurements/new.smis", json={"newFilename": "other.smis"})
+        assert resp.status_code == 409
+
+        resp = await client.delete("/api/measurements/new.smis")
+        assert resp.status_code == 200, resp.text
+        assert not (tmp_path / "new.smis").exists()
+
+        resp = await client.delete("/api/measurements/does-not-exist.smis")
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_pattern_rename_and_delete(tmp_path, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "PATTERNS_DIR", tmp_path)
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.config, "PATTERNS_DIR", tmp_path)
+
+    (tmp_path / "old.val").write_text("<pattern/>")
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.patch("/api/patterns/old.val", json={"newFilename": "new.val"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["filename"] == "new.val"
+        assert (tmp_path / "new.val").exists()
+
+        resp = await client.delete("/api/patterns/new.val")
+        assert resp.status_code == 200, resp.text
+        assert not (tmp_path / "new.val").exists()
+
+
+@pytest.mark.asyncio
 async def test_start_session_surfaces_missing_credentials_cleanly(monkeypatch):
     # config.ANTHROPIC_API_KEY is read from .env once at import time (see
     # config.py's load_dotenv() call), so patching the env var here would only affect
@@ -366,3 +424,54 @@ async def test_start_session_honors_requested_model(monkeypatch):
 
         resp = await client.get(f"/api/sessions/{session_id}")
         assert resp.json()["model"] == "claude-haiku-4-5"
+
+
+@pytest.mark.asyncio
+async def test_update_settings_can_edit_goal(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/sessions", json={"goal": "Draw a line", "autorun": False})
+        assert resp.status_code == 200, resp.text
+        session_id = resp.json()["sessionId"]
+
+        resp = await client.post(f"/api/sessions/{session_id}/settings", json={"goal": "Draw a circle instead"})
+        assert resp.status_code == 200, resp.text
+
+        resp = await client.get(f"/api/sessions/{session_id}")
+        assert resp.json()["goal"] == "Draw a circle instead"
+
+        # Also reflected in the session list the home page polls.
+        resp = await client.get("/api/sessions")
+        row = next(s for s in resp.json()["sessions"] if s["sessionId"] == session_id)
+        assert row["goal"] == "Draw a circle instead"
+
+
+@pytest.mark.asyncio
+async def test_delete_session(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/sessions", json={"goal": "Draw a line", "autorun": False})
+        assert resp.status_code == 200, resp.text
+        session_id = resp.json()["sessionId"]
+        output_dir = manager.get(session_id).agent.output_dir
+        assert output_dir.exists()
+
+        resp = await client.delete(f"/api/sessions/{session_id}")
+        assert resp.status_code == 200, resp.text
+
+        resp = await client.get(f"/api/sessions/{session_id}")
+        assert resp.status_code == 404
+        assert not output_dir.exists()
+
+        resp = await client.delete(f"/api/sessions/{session_id}")
+        assert resp.status_code == 404

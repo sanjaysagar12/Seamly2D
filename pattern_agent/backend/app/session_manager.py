@@ -399,6 +399,7 @@ class SessionManager:
         model: str | None = None,
         api_key: str | None = None,
         system_prompt: str | None = None,
+        goal: str | None = None,
     ) -> None:
         """Live-edits an existing session's model / Anthropic credentials / system prompt --
         each takes effect on the *next* Claude call, no backend restart or session restart
@@ -433,7 +434,38 @@ class SessionManager:
         if system_prompt is not None:
             agent.system_prompt = system_prompt.strip() or DEFAULT_SYSTEM_PROMPT
 
+        if goal is not None:
+            # Purely descriptive metadata -- unlike model/system_prompt, editing it never
+            # touches self.messages, so it has no effect on reasoning already in flight;
+            # it just relabels the session (e.g. the home page's session list, this
+            # session's own header) and gives the next inject_user_message() a corrected
+            # starting point to refer back to.
+            agent.goal = goal.strip()
+
         await self._persist_session(design_session)
+
+    async def delete_session(self, session_id: str) -> None:
+        """Permanently removes a session: stops it if still running, closes its actiond
+        process, drops it from memory and the database, and deletes its output
+        directory (checkpoints, snapshots, the saved .val) from disk."""
+        design_session = self.get(session_id)
+        try:
+            await self.stop_session(session_id)
+        except Exception:
+            logger.exception("Error stopping session %s before delete", session_id)
+        try:
+            await design_session.agent.actiond.close()
+        except Exception:
+            pass
+
+        del self._sessions[session_id]
+
+        try:
+            await db.delete_session(session_id)
+        except Exception:
+            logger.exception("Failed to delete persisted state for session %s", session_id)
+
+        shutil.rmtree(design_session.agent.output_dir, ignore_errors=True)
 
     async def stop_session(self, session_id: str) -> None:
         design_session = self.get(session_id)

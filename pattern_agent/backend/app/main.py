@@ -42,6 +42,39 @@ app.mount("/files", StaticFiles(directory=str(config.SESSIONS_DIR)), name="files
 
 
 # ---------------------------------------------------------------------------
+# Shared helpers for the uploaded-file managers below (measurements, patterns) --
+# both are "a directory of files matching one of a few extensions", so renaming and
+# deleting are identical operations parameterized only by directory + allowed extensions.
+# ---------------------------------------------------------------------------
+
+class RenameFileRequest(BaseModel):
+    newFilename: str
+
+
+def _resolve_uploaded_file(directory: Path, filename: str, allowed_exts: set[str]) -> Path:
+    candidate = directory / Path(filename).name
+    if not candidate.is_file() or candidate.suffix.lower() not in allowed_exts:
+        raise HTTPException(404, f"File not found: {filename}")
+    return candidate
+
+
+def _delete_uploaded_file(directory: Path, filename: str, allowed_exts: set[str]) -> None:
+    _resolve_uploaded_file(directory, filename, allowed_exts).unlink()
+
+
+def _rename_uploaded_file(directory: Path, filename: str, new_filename: str, allowed_exts: set[str]) -> str:
+    candidate = _resolve_uploaded_file(directory, filename, allowed_exts)
+    new_name = Path(new_filename).name
+    if not new_name or Path(new_name).suffix.lower() not in allowed_exts:
+        raise HTTPException(400, f"Unsupported or missing file name/type: {new_filename!r}")
+    dest = directory / new_name
+    if dest.exists():
+        raise HTTPException(409, f"A file named {new_name!r} already exists")
+    candidate.rename(dest)
+    return dest.name
+
+
+# ---------------------------------------------------------------------------
 # Measurements
 # ---------------------------------------------------------------------------
 
@@ -67,6 +100,18 @@ async def upload_measurement(file: UploadFile = File(...)):
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     return {"filename": dest.name}
+
+
+@app.patch("/api/measurements/{filename}")
+async def rename_measurement(filename: str, req: RenameFileRequest):
+    new_name = _rename_uploaded_file(config.MEASUREMENTS_DIR, filename, req.newFilename, ALLOWED_MEASUREMENT_EXTS)
+    return {"filename": new_name}
+
+
+@app.delete("/api/measurements/{filename}")
+async def delete_measurement(filename: str):
+    _delete_uploaded_file(config.MEASUREMENTS_DIR, filename, ALLOWED_MEASUREMENT_EXTS)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +152,18 @@ async def upload_pattern(file: UploadFile = File(...)):
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
     return {"filename": dest.name}
+
+
+@app.patch("/api/patterns/{filename}")
+async def rename_pattern(filename: str, req: RenameFileRequest):
+    new_name = _rename_uploaded_file(config.PATTERNS_DIR, filename, req.newFilename, ALLOWED_PATTERN_EXTS)
+    return {"filename": new_name}
+
+
+@app.delete("/api/patterns/{filename}")
+async def delete_pattern(filename: str):
+    _delete_uploaded_file(config.PATTERNS_DIR, filename, ALLOWED_PATTERN_EXTS)
+    return {"ok": True}
 
 
 @app.get("/api/patterns/{filename}/pieces")
@@ -251,6 +308,17 @@ async def get_session(session_id: str):
     }
 
 
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Permanently deletes a session -- stops it first if still running. Irreversible:
+    the conversation, checkpoints, snapshots, and saved .val are all removed from disk."""
+    try:
+        await manager.delete_session(session_id)
+    except SessionNotFoundError:
+        raise HTTPException(404, "Session not found")
+    return {"ok": True}
+
+
 @app.get("/api/sessions/{session_id}/pieces")
 async def list_session_pieces(session_id: str):
     try:
@@ -283,18 +351,19 @@ class UpdateSessionSettingsRequest(BaseModel):
     model: Optional[str] = None
     apiKey: Optional[str] = None
     systemPrompt: Optional[str] = None
+    goal: Optional[str] = None
 
 
 @app.post("/api/sessions/{session_id}/settings")
 async def update_session_settings(session_id: str, req: UpdateSessionSettingsRequest):
-    """Live-edits model / Anthropic API key / system prompt for an existing session -- see
-    SessionManager.update_settings()'s docstring for exactly what does and doesn't persist.
-    Every field is optional and independent: omit whichever ones you don't want to change.
-    The API key is write-only by design -- it is never echoed back by this or any other
-    endpoint (see get_session above)."""
+    """Live-edits model / Anthropic API key / system prompt / goal for an existing
+    session -- see SessionManager.update_settings()'s docstring for exactly what does
+    and doesn't persist. Every field is optional and independent: omit whichever ones
+    you don't want to change. The API key is write-only by design -- it is never echoed
+    back by this or any other endpoint (see get_session above)."""
     try:
         await manager.update_settings(
-            session_id, model=req.model, api_key=req.apiKey, system_prompt=req.systemPrompt
+            session_id, model=req.model, api_key=req.apiKey, system_prompt=req.systemPrompt, goal=req.goal
         )
     except SessionNotFoundError:
         raise HTTPException(404, "Session not found")

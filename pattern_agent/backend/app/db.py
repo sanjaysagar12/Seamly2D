@@ -160,6 +160,13 @@ async def append_event(session_id: str, seq: int, event: dict[str, Any]) -> None
     await conn.commit()
 
 
+async def delete_session(session_id: str) -> None:
+    conn = _conn()
+    await conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+    await conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+    await conn.commit()
+
+
 async def load_all_sessions() -> list[dict[str, Any]]:
     conn = _conn()
     async with conn.execute("SELECT * FROM sessions ORDER BY created_at") as cursor:

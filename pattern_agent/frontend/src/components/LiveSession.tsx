@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  deleteSession,
   downloadValUrl,
   getPieceSnapshot,
   getSession,
@@ -107,6 +108,7 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
   const [settingsBusy, setSettingsBusy] = useState(false)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   // Piece switcher: null = viewing the whole draft (the default, existing behavior);
   // a piece name = viewing an on-demand close-up of just that piece instead.
@@ -123,8 +125,16 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
         setStepLimit(detail.stepLimit)
         setModel(detail.model)
         setSystemPrompt(detail.systemPrompt)
+        // A session started with a focus piece (or one the agent has since switched to)
+        // must open already showing that piece's close-up, not the whole-draft default --
+        // route through the same handler manual switching uses so it does a real,
+        // fresh render rather than hoping a stale WS-replayed snapshot is still valid.
+        if (detail.currentPiece) {
+          void handleViewPieceChange(detail.currentPiece)
+        }
       })
       .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
   useEffect(() => {
@@ -226,6 +236,7 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
       await updateSessionSettings(sessionId, {
         model,
         systemPrompt,
+        goal,
         // Omit entirely unless the user actually typed something -- see api.ts's comment on
         // why an empty string is not the same as "no change" here.
         ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
@@ -236,6 +247,18 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
       setSettingsError(String(err))
     } finally {
       setSettingsBusy(false)
+    }
+  }
+
+  async function handleDeleteSession() {
+    if (!window.confirm('Delete this session? This cannot be undone.')) return
+    setDeleteBusy(true)
+    try {
+      await deleteSession(sessionId)
+      onNewSession()
+    } catch (err) {
+      setSettingsError(String(err))
+      setDeleteBusy(false)
     }
   }
 
@@ -306,6 +329,19 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
             </div>
           </div>
           <div className="settings-col settings-col-wide">
+            <label className="field-label" htmlFor="settings-goal">
+              Goal
+            </label>
+            <textarea
+              id="settings-goal"
+              rows={2}
+              placeholder="What should the agent draft? Leave blank to keep giving instructions via chat."
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              disabled={!canEditSettings}
+            />
+          </div>
+          <div className="settings-col settings-col-wide">
             <label className="field-label" htmlFor="settings-system-prompt">
               System prompt
             </label>
@@ -327,6 +363,18 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
             </button>
             {settingsSaved && <span className="settings-saved">Saved — takes effect next turn.</span>}
             {settingsError && <span className="settings-error">{settingsError}</span>}
+          </div>
+
+          <div className="settings-danger-zone">
+            <div className="settings-danger-label">Danger zone</div>
+            <button
+              type="button"
+              className="danger-outline"
+              disabled={deleteBusy}
+              onClick={() => void handleDeleteSession()}
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete this session'}
+            </button>
           </div>
         </div>
       )}
@@ -351,23 +399,33 @@ export function LiveSession({ sessionId, onNewSession }: Props) {
         <div className="snapshot-panel">
           {pieces.length > 0 && (
             <div className="piece-switcher">
-              <label className="field-label" htmlFor="piece-view">
-                View
-              </label>
-              <select
-                id="piece-view"
-                value={viewPiece ?? ''}
-                onChange={(e) => void handleViewPieceChange(e.target.value)}
-              >
-                <option value="">Whole draft</option>
+              <div className="field-label">Viewing</div>
+              <div className="piece-chip-row">
+                <button
+                  type="button"
+                  className={`piece-chip ${!viewPiece ? 'piece-chip-active' : ''}`}
+                  onClick={() => void handleViewPieceChange('')}
+                >
+                  Whole draft
+                </button>
                 {pieces.map((p) => (
-                  <option key={p.id} value={p.name}>
+                  <button
+                    type="button"
+                    key={p.id}
+                    className={`piece-chip ${viewPiece === p.name ? 'piece-chip-active' : ''}`}
+                    onClick={() => void handleViewPieceChange(p.name)}
+                    title={state.currentPiece === p.name ? "Agent's current focus" : undefined}
+                  >
                     {p.name}
-                    {state.currentPiece === p.name ? ' (agent focus)' : ''}
-                  </option>
+                    {state.currentPiece === p.name && <span className="piece-chip-focus-dot" />}
+                  </button>
                 ))}
-              </select>
-              {pieceBusy && <span className="piece-switcher-busy mono">rendering…</span>}
+              </div>
+              {pieceBusy && (
+                <span className="piece-switcher-busy mono">
+                  <span className="spinner" /> rendering…
+                </span>
+              )}
               {pieceError && <span className="piece-switcher-error">{pieceError}</span>}
             </div>
           )}

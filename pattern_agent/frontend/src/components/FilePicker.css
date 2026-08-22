@@ -1,0 +1,138 @@
+.file-picker {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-picker-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+
+.file-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.file-picker-empty {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  padding: 8px 10px;
+}
+
+.file-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.file-picker-row:hover {
+  background: var(--bg-panel);
+}
+
+.file-picker-row-active {
+  background: var(--accent-soft);
+}
+
+.file-picker-row-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 7px 8px;
+  text-align: left;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.file-picker-radio {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-faint);
+}
+
+.file-picker-row-active .file-picker-radio {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.file-picker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-picker-name-muted {
+  color: var(--ink-dim);
+  font-style: italic;
+}
+
+.file-picker-actions {
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  flex-shrink: 0;
+}
+
+.file-picker-icon-btn {
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-picker-icon-btn:hover:not(:disabled) {
+  background: var(--bg-panel);
+  color: var(--ink);
+}
+
+.file-picker-icon-btn-danger:hover:not(:disabled) {
+  color: var(--err);
+}
+
+.file-picker-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.file-picker-row-editing {
+  padding: 2px;
+}
+
+.file-picker-rename-input {
+  width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--ink);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.file-picker-rename-input:focus {
+  outline: none;
+}
