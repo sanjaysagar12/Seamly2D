@@ -55,7 +55,7 @@ ENV ACTIOND_EXE=/app/bin/actiond \
     FRONTEND_DIST_DIR=/app/frontend-dist \
     PYTHONUNBUFFERED=1
 
-RUN mkdir -p /app/backend/data/measurements /app/backend/data/sessions \
+RUN mkdir -p /app/backend/data/measurements /app/backend/data/patterns /app/backend/data/sessions \
     && chown -R actiond:actiond /app/backend
 
 EXPOSE 6100

@@ -234,6 +234,33 @@ input[type='number'] {
   height: 15px;
 }
 
+.system-prompt-toggle {
+  margin-bottom: 12px;
+  padding-top: 0;
+}
+
+.field-col-wide {
+  margin-bottom: 22px;
+}
+
+.system-prompt-input {
+  width: 100%;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  font-family: 'JetBrains Mono', monospace;
+  resize: vertical;
+}
+
+.system-prompt-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .start-error {
   background: var(--err-soft);
   color: var(--err);

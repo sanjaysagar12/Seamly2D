@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { listMeasurements, listModels, listSessions, startSession, uploadMeasurement } from '../lib/api'
+import {
+  listMeasurements,
+  listModels,
+  listPatterns,
+  listSessions,
+  startSession,
+  uploadMeasurement,
+  uploadPattern,
+} from '../lib/api'
 import type { ModelOption, SessionSummary } from '../lib/types'
 import { STOP_REASON_LABELS } from '../lib/types'
 import './StartScreen.css'
@@ -27,14 +35,19 @@ export function StartScreen({ onStarted }: Props) {
   const [goal, setGoal] = useState('')
   const [measurements, setMeasurements] = useState<string[]>([])
   const [selected, setSelected] = useState<string>('')
+  const [patterns, setPatterns] = useState<string[]>([])
+  const [selectedPattern, setSelectedPattern] = useState<string>('')
   const [models, setModels] = useState<ModelOption[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [systemPrompt, setSystemPrompt] = useState('')
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false)
   const [stepLimit, setStepLimit] = useState(60)
   const [autorun, setAutorun] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const patternInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listMeasurements()
@@ -46,10 +59,20 @@ export function StartScreen({ onStarted }: Props) {
   }, [])
 
   useEffect(() => {
+    // Left unselected by default, unlike measurements -- omitting --pattern is a
+    // supported, meaningful choice (actiond starts from an empty pattern), not just
+    // "no file uploaded yet".
+    listPatterns()
+      .then((files) => setPatterns(files))
+      .catch((err) => setError(String(err)))
+  }, [])
+
+  useEffect(() => {
     listModels()
       .then((data) => {
         setModels(data.models)
         setSelectedModel(data.default && data.models.some((m) => m.id === data.default) ? data.default : data.models[0]?.id ?? '')
+        setSystemPrompt(data.defaultSystemPrompt)
       })
       .catch((err) => setError(String(err)))
   }, [])
@@ -85,6 +108,20 @@ export function StartScreen({ onStarted }: Props) {
     }
   }
 
+  async function handleUploadPattern(file: File) {
+    setBusy(true)
+    setError(null)
+    try {
+      const filename = await uploadPattern(file)
+      setPatterns((prev) => (prev.includes(filename) ? prev : [...prev, filename]))
+      setSelectedPattern(filename)
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleStart() {
     if (!goal.trim()) {
       setError('Describe what you want drafted first.')
@@ -96,9 +133,11 @@ export function StartScreen({ onStarted }: Props) {
       const { sessionId } = await startSession({
         goal: goal.trim(),
         measurementsFilename: selected || undefined,
+        patternFilename: selectedPattern || undefined,
         stepLimit,
         autorun,
         model: selectedModel || undefined,
+        systemPrompt: systemPrompt.trim() || undefined,
       })
       onStarted(sessionId)
     } catch (err) {
@@ -142,6 +181,43 @@ export function StartScreen({ onStarted }: Props) {
 
         <div className="field-row">
           <div className="field-col">
+            <label className="field-label" htmlFor="pattern">
+              Base pattern (optional)
+            </label>
+            <select
+              id="pattern"
+              value={selectedPattern}
+              onChange={(e) => setSelectedPattern(e.target.value)}
+            >
+              <option value="">Start from an empty pattern</option>
+              {patterns.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => patternInputRef.current?.click()}
+              disabled={busy}
+            >
+              + upload .val / .sm2d
+            </button>
+            <input
+              ref={patternInputRef}
+              type="file"
+              accept=".val,.sm2d"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void handleUploadPattern(file)
+                e.target.value = ''
+              }}
+            />
+          </div>
+
+          <div className="field-col">
             <label className="field-label" htmlFor="measurements">
               Measurement file
             </label>
@@ -178,7 +254,9 @@ export function StartScreen({ onStarted }: Props) {
               }}
             />
           </div>
+        </div>
 
+        <div className="field-row">
           <div className="field-col field-col-model">
             <label className="field-label" htmlFor="model">
               Model
@@ -211,6 +289,35 @@ export function StartScreen({ onStarted }: Props) {
           <input type="checkbox" checked={autorun} onChange={(e) => setAutorun(e.target.checked)} />
           Run automatically (uncheck to step through manually for debugging)
         </label>
+
+        <button
+          type="button"
+          className="link-button system-prompt-toggle"
+          onClick={() => setSystemPromptOpen((v) => !v)}
+        >
+          {systemPromptOpen ? '− hide system prompt' : '+ edit system prompt'}
+        </button>
+        {systemPromptOpen && (
+          <div className="field-col field-col-wide">
+            <label className="field-label" htmlFor="system-prompt">
+              System prompt
+            </label>
+            <textarea
+              id="system-prompt"
+              className="system-prompt-input"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              rows={10}
+            />
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => listModels().then((data) => setSystemPrompt(data.defaultSystemPrompt))}
+            >
+              reset to default
+            </button>
+          </div>
+        )}
 
         {error && <div className="start-error">{error}</div>}
 

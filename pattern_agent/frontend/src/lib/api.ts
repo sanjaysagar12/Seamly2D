@@ -24,12 +24,29 @@ export async function uploadMeasurement(file: File): Promise<string> {
   return data.filename
 }
 
+export async function listPatterns(): Promise<string[]> {
+  const data = await req<{ files: string[] }>('/api/patterns')
+  return data.files
+}
+
+export async function uploadPattern(file: File): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  const data = await req<{ filename: string }>('/api/patterns', {
+    method: 'POST',
+    body: form,
+  })
+  return data.filename
+}
+
 export async function startSession(params: {
   goal: string
   measurementsFilename?: string
+  patternFilename?: string
   stepLimit?: number
   autorun?: boolean
   model?: string
+  systemPrompt?: string
 }): Promise<{ sessionId: string }> {
   return req('/api/sessions', {
     method: 'POST',
@@ -38,7 +55,11 @@ export async function startSession(params: {
   })
 }
 
-export async function listModels(): Promise<{ models: ModelOption[]; default: string }> {
+export async function listModels(): Promise<{
+  models: ModelOption[]
+  default: string
+  defaultSystemPrompt: string
+}> {
   return req('/api/models')
 }
 

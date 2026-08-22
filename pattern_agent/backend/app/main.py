@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config, db
+from .agent_loop import SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT
 from .session_manager import SessionNotFoundError, manager
 
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +70,37 @@ async def upload_measurement(file: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------------------------
+# Base pattern files (optional starting point for a session, instead of an
+# empty pattern -- actiond's --pattern loads either extension the same way,
+# see pattern_session.cpp/PatternSession::loadFromFile, which just parses the
+# file's XML content regardless of suffix).
+# ---------------------------------------------------------------------------
+
+ALLOWED_PATTERN_EXTS = {".val", ".sm2d"}
+
+
+@app.get("/api/patterns")
+async def list_patterns():
+    files = sorted(
+        p.name
+        for p in config.PATTERNS_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in ALLOWED_PATTERN_EXTS
+    )
+    return {"files": files}
+
+
+@app.post("/api/patterns")
+async def upload_pattern(file: UploadFile = File(...)):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_PATTERN_EXTS:
+        raise HTTPException(400, f"Unsupported pattern file type {ext!r}")
+    dest = config.PATTERNS_DIR / Path(file.filename).name
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"filename": dest.name}
+
+
+# ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
@@ -77,6 +109,10 @@ async def list_models():
     return {
         "models": [{"id": model_id, "label": label} for model_id, label in config.SELECTABLE_MODELS.items()],
         "default": config.ANTHROPIC_MODEL,
+        # Lets the home page prefill an editable system-prompt field with the real default
+        # instead of either hardcoding a stale copy of it in the frontend or adding a second
+        # round trip just for one string -- StartScreen already fetches this endpoint on mount.
+        "defaultSystemPrompt": DEFAULT_SYSTEM_PROMPT,
     }
 
 
@@ -87,9 +123,11 @@ async def list_models():
 class StartSessionRequest(BaseModel):
     goal: str
     measurementsFilename: Optional[str] = None
+    patternFilename: Optional[str] = None
     stepLimit: Optional[int] = None
     autorun: bool = True
     model: Optional[str] = None
+    systemPrompt: Optional[str] = None
 
 
 @app.post("/api/sessions")
@@ -101,13 +139,22 @@ async def start_session(req: StartSessionRequest):
             raise HTTPException(404, f"Measurement file not found: {req.measurementsFilename}")
         measurements_path = candidate
 
+    pattern_path = None
+    if req.patternFilename:
+        candidate = config.PATTERNS_DIR / req.patternFilename
+        if not candidate.exists():
+            raise HTTPException(404, f"Pattern file not found: {req.patternFilename}")
+        pattern_path = candidate
+
     try:
         design_session = await manager.start_session(
             goal=req.goal,
             measurements_path=measurements_path,
+            pattern_path=pattern_path,
             step_limit=req.stepLimit or config.DEFAULT_STEP_LIMIT,
             autorun=req.autorun,
             model=req.model,
+            system_prompt=req.systemPrompt,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
