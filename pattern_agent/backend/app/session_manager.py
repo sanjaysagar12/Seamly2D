@@ -214,13 +214,25 @@ class SessionManager:
 
         return design_session
 
-    async def list_pattern_pieces(self, pattern_path: Path) -> list[dict[str, Any]]:
+    async def list_pattern_pieces(
+        self, pattern_path: Path, measurements_path: Path | None = None
+    ) -> list[dict[str, Any]]:
         """Briefly loads a base pattern file into its own throwaway actiond process just
         to run piece.list -- lets the home page's pattern picker show which pieces (e.g.
         Front/Back/Sleeve) an uploaded .val/.sm2d already contains before any real
-        session exists. Never touches self._sessions."""
+        session exists. Never touches self._sessions.
+
+        measurements_path is optional but often required in practice: a multi-size
+        pattern's own <measurements> element typically names a path from wherever it was
+        originally authored (e.g. right next to the file on the original author's own
+        disk), which essentially never resolves once the file is uploaded here -- actiond
+        fails to even load the pattern at all in that case ("Measurements file not
+        found"), since formulas can reference measurement values during parsing. Passing
+        an explicit --measurements (see PatternSession's constructor) overrides that
+        stale internal reference outright, exactly like it does for a real session.
+        """
         tmp_dir = Path(tempfile.mkdtemp(prefix="piece_preview_", dir=str(config.DATA_DIR)))
-        actiond = ActiondSession(output_dir=tmp_dir, pattern_path=pattern_path)
+        actiond = ActiondSession(output_dir=tmp_dir, pattern_path=pattern_path, measurements_path=measurements_path)
         try:
             await actiond.start()
             outcome = await actiond.run_single("piece.list")

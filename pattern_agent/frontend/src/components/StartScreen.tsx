@@ -79,7 +79,11 @@ export function StartScreen({ onStarted }: Props) {
     }
     let cancelled = false
     setPiecesLoading(true)
-    listPatternPieces(selectedPattern)
+    // Pass along whichever measurement file is currently selected -- many real
+    // multi-size patterns fail to load at all without their measurements (a stale
+    // reference baked into the file itself, see api.ts's listPatternPieces comment),
+    // so re-run this whenever either file selection changes, not just the pattern.
+    listPatternPieces(selectedPattern, selected || undefined)
       .then((pieces) => {
         if (!cancelled) setPatternPieces(pieces)
       })
@@ -95,7 +99,7 @@ export function StartScreen({ onStarted }: Props) {
     return () => {
       cancelled = true
     }
-  }, [selectedPattern])
+  }, [selectedPattern, selected])
 
   useEffect(() => {
     listModels()

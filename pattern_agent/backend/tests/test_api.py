@@ -211,6 +211,59 @@ async def test_pattern_file_pieces_endpoint(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pattern_file_pieces_endpoint_uses_selected_measurements(tmp_path, monkeypatch):
+    """Regression test for a real bug report: a multi-size pattern file's own internal
+    <measurements> reference points at wherever it was originally authored (e.g. right
+    next to it on the original author's disk), which never resolves once the file is
+    uploaded here -- actiond fails to even load the pattern ("Measurements file not
+    found"). Passing the measurement file the user selected alongside it must override
+    that stale reference, using the real multi-piece fixture the bug was reported
+    against (not a synthetic one -- this exact pattern/measurements pairing is what
+    actually reproduced the failure)."""
+    from app import config
+
+    monkeypatch.setattr(config, "PATTERNS_DIR", tmp_path)
+    monkeypatch.setattr(config, "MEASUREMENTS_DIR", tmp_path / "measurements")
+    (tmp_path / "measurements").mkdir()
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module.config, "PATTERNS_DIR", tmp_path)
+    monkeypatch.setattr(main_module.config, "MEASUREMENTS_DIR", tmp_path / "measurements")
+
+    pattern_fixture = config.REPO_ROOT / "tests/actionlayer/fixtures/patterns/Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d"
+    measurements_fixture = config.REPO_ROOT / "tests/actionlayer/fixtures/measurements/Aldrich-Womens-MultiSize-06-14.smms"
+    assert pattern_fixture.exists() and measurements_fixture.exists()
+    (tmp_path / pattern_fixture.name).write_bytes(pattern_fixture.read_bytes())
+    (tmp_path / "measurements" / measurements_fixture.name).write_bytes(measurements_fixture.read_bytes())
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Without the measurements file: fails exactly like the bug report (stale
+        # internal reference, actiond can't even load the pattern).
+        resp = await client.get(f"/api/patterns/{pattern_fixture.name}/pieces")
+        assert resp.status_code == 400
+        assert "Measurements file not found" in resp.text
+
+        # With it: succeeds and reports the pattern's real 7 pieces.
+        resp = await client.get(
+            f"/api/patterns/{pattern_fixture.name}/pieces",
+            params={"measurementsFilename": measurements_fixture.name},
+        )
+        assert resp.status_code == 200, resp.text
+        names = {p["name"] for p in resp.json()["pieces"]}
+        assert names == {
+            "A - Skirt Back", "A - Skirt Front", "B - Trousers Front", "B - Trousers Back",
+            "C - Bodice Back", "C - Bodice Front", "D - 1 Piece Sleeve",
+        }
+
+        resp = await client.get(
+            f"/api/patterns/{pattern_fixture.name}/pieces",
+            params={"measurementsFilename": "does-not-exist.smms"},
+        )
+        assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_session_pieces_and_piece_snapshot_endpoints(monkeypatch):
     """The session page's piece switcher: list pieces in the live session, then render
     an on-demand close-up of one of them. Uses autorun=False and drives actiond

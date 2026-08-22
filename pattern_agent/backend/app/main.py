@@ -110,14 +110,30 @@ async def upload_pattern(file: UploadFile = File(...)):
 
 
 @app.get("/api/patterns/{filename}/pieces")
-async def list_pattern_file_pieces(filename: str):
+async def list_pattern_file_pieces(filename: str, measurementsFilename: Optional[str] = None):
     """Which pieces (Front/Back/Sleeve/...) an uploaded base pattern file already
-    contains -- lets the home page show/select them before a session is even started."""
+    contains -- lets the home page show/select them before a session is even started.
+
+    measurementsFilename is optional but frequently required: many real, multi-size
+    pattern files (e.g. an Aldrich block-style master pattern) reference a measurements
+    file by a path from wherever they were originally authored, which never resolves
+    once uploaded here -- actiond then fails to load the pattern at all ("Measurements
+    file not found"). Passing the measurement file selected alongside this pattern (see
+    GET/POST /api/measurements) overrides that stale reference, exactly like starting a
+    real session with both files does.
+    """
     candidate = config.PATTERNS_DIR / Path(filename).name
     if not candidate.exists():
         raise HTTPException(404, f"Pattern file not found: {filename}")
+
+    measurements_path = None
+    if measurementsFilename:
+        measurements_path = config.MEASUREMENTS_DIR / Path(measurementsFilename).name
+        if not measurements_path.exists():
+            raise HTTPException(404, f"Measurement file not found: {measurementsFilename}")
+
     try:
-        pieces = await manager.list_pattern_pieces(candidate)
+        pieces = await manager.list_pattern_pieces(candidate, measurements_path=measurements_path)
     except Exception as exc:
         raise HTTPException(400, f"Could not read pieces from {filename}: {exc}") from exc
     return {"pieces": pieces}

@@ -39,8 +39,13 @@ export async function uploadPattern(file: File): Promise<string> {
   return data.filename
 }
 
-export async function listPatternPieces(filename: string): Promise<PieceInfo[]> {
-  const data = await req<{ pieces: PieceInfo[] }>(`/api/patterns/${encodeURIComponent(filename)}/pieces`)
+export async function listPatternPieces(filename: string, measurementsFilename?: string): Promise<PieceInfo[]> {
+  // Many real multi-size pattern files reference a measurements file by whatever path
+  // they were originally authored at, which never resolves once uploaded here -- passing
+  // the measurement file selected alongside this pattern lets the backend override that
+  // stale reference (same as starting a real session with both files does).
+  const qs = measurementsFilename ? `?measurementsFilename=${encodeURIComponent(measurementsFilename)}` : ''
+  const data = await req<{ pieces: PieceInfo[] }>(`/api/patterns/${encodeURIComponent(filename)}/pieces${qs}`)
   return data.pieces
 }
 
