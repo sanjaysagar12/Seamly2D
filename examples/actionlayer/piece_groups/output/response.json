@@ -1,0 +1,216 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.list",
+            "value": {
+                "pieces": [
+                    {
+                        "id": 110,
+                        "name": "A - Skirt Back",
+                        "nodeCount": 16,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 135,
+                        "name": "A - Skirt Front",
+                        "nodeCount": 13,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 330,
+                        "name": "B - Trousers Front",
+                        "nodeCount": 19,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 363,
+                        "name": "B - Trousers Back",
+                        "nodeCount": 23,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 500,
+                        "name": "C - Bodice Back",
+                        "nodeCount": 14,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 538,
+                        "name": "C - Bodice Front",
+                        "nodeCount": 14,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 696,
+                        "name": "D - 1 Piece Sleeve",
+                        "nodeCount": 14,
+                        "seamAllowance": true
+                    }
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 2481.3529675876484,
+                    "width": 1423.5087417336001,
+                    "x": -1349.50094488189,
+                    "y": 3174.3324859805666
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/A-Skirt-Back.png",
+                "piece": "A - Skirt Back",
+                "pixelSize": {
+                    "height": 2481,
+                    "width": 1424
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 2489.036044112295,
+                    "width": 1366.8157500171685,
+                    "x": -2353.6297657652003,
+                    "y": 3136.988552883374
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/A-Skirt-Front.png",
+                "piece": "A - Skirt Front",
+                "pixelSize": {
+                    "height": 2489,
+                    "width": 1367
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 4282.976584673951,
+                    "width": 1692.9127625577546,
+                    "x": 1514.1306878875412,
+                    "y": 1583.6448641449463
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/B-Trousers-Front.png",
+                "piece": "B - Trousers Front",
+                "pixelSize": {
+                    "height": 4096,
+                    "width": 1619
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 4363.145113008541,
+                    "width": 2105.608731418959,
+                    "x": -377.55404664844446,
+                    "y": 1486.6656312316597
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/B-Trousers-Back.png",
+                "piece": "B - Trousers Back",
+                "pixelSize": {
+                    "height": 4096,
+                    "width": 1977
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 2642.159049735148,
+                    "width": 1120.6398948413148,
+                    "x": -2355.463779527559,
+                    "y": 345.2077219183956
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/C-Bodice-Back.png",
+                "piece": "C - Bodice Back",
+                "pixelSize": {
+                    "height": 2642,
+                    "width": 1121
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 2639.665131365196,
+                    "width": 1273.5440370269944,
+                    "x": -1224.9867141923482,
+                    "y": 347.6528843828358
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/C-Bodice-Front.png",
+                "piece": "C - Bodice Front",
+                "pixelSize": {
+                    "height": 2640,
+                    "width": 1274
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 2459.902193792222,
+                    "width": 1571.5677453321248,
+                    "x": -3817.4508203270793,
+                    "y": 488.0120191427271
+                },
+                "highlighted": [],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/examples/actionlayer/piece_groups/output/D-1-Piece-Sleeve.png",
+                "piece": "D - 1 Piece Sleeve",
+                "pixelSize": {
+                    "height": 2460,
+                    "width": 1572
+                },
+                "skippedHighlights": [],
+                "status": "ok"
+            }
+        }
+    ]
+}

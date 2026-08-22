@@ -1,0 +1,371 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 3,
+                "name": "C",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 4,
+                "name": "D",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 5,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "B",
+                "id": 6,
+                "secondPoint": "C"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "C",
+                "id": 7,
+                "secondPoint": "D"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "D",
+                "id": 8,
+                "secondPoint": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 9,
+                "name": "E",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 10,
+                "name": "F",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 11,
+                "name": "G",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 12,
+                "name": "H",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "E",
+                "id": 13,
+                "secondPoint": "F"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "F",
+                "id": 14,
+                "secondPoint": "G"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "G",
+                "id": 15,
+                "secondPoint": "H"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "H",
+                "id": 16,
+                "secondPoint": "E"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.addPatternPiece",
+            "value": {
+                "id": 21,
+                "name": "SquareOne",
+                "op": "piece.addPatternPiece"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.addPatternPiece",
+            "value": {
+                "id": 26,
+                "name": "SquareTwo",
+                "op": "piece.addPatternPiece"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.addAnchorPoint",
+            "value": {
+                "id": 1,
+                "op": "piece.addAnchorPoint",
+                "piece": "SquareOne",
+                "point": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.list",
+            "value": {
+                "pieces": [
+                    {
+                        "id": 21,
+                        "name": "SquareOne",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 26,
+                        "name": "SquareTwo",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    }
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.dump",
+            "value": {
+                "anchors": [
+                    {
+                        "id": 27,
+                        "name": "A",
+                        "x": 0,
+                        "y": 0
+                    }
+                ],
+                "id": 21,
+                "internalPaths": [
+                ],
+                "name": "SquareOne",
+                "nodes": [
+                    {
+                        "id": 17,
+                        "name": "__pieceNode_17",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": 18,
+                        "name": "__pieceNode_18",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "id": 19,
+                        "name": "__pieceNode_19",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 377.9527559055118,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 20,
+                        "name": "__pieceNode_20",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    }
+                ],
+                "op": "piece.dump",
+                "seamAllowance": true,
+                "seamAllowanceWidthFormula": "10"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.dump",
+            "value": {
+                "anchors": [
+                ],
+                "id": 26,
+                "internalPaths": [
+                ],
+                "name": "SquareTwo",
+                "nodes": [
+                    {
+                        "id": 22,
+                        "name": "__pieceNode_22",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 1511.8110236220473,
+                        "y": 0
+                    },
+                    {
+                        "id": 23,
+                        "name": "__pieceNode_23",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 1889.763779527559,
+                        "y": 0
+                    },
+                    {
+                        "id": 24,
+                        "name": "__pieceNode_24",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 1889.763779527559,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 25,
+                        "name": "__pieceNode_25",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 1511.8110236220473,
+                        "y": -377.9527559055118
+                    }
+                ],
+                "op": "piece.dump",
+                "seamAllowance": true,
+                "seamAllowanceWidthFormula": "10"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 133.25618451236897,
+                    "width": 133.256184512369,
+                    "x": 122.34828569657142,
+                    "y": -255.6044702089404
+                },
+                "highlighted": [
+                ],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/11_piece_introspection/piece_square_one.png",
+                "piece": "SquareOne",
+                "pixelSize": {
+                    "height": 133,
+                    "width": 133
+                },
+                "skippedHighlights": [
+                ],
+                "status": "ok"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "render.snapshot",
+            "value": {
+                "boundingBox": {
+                    "height": 133.256184512369,
+                    "width": 133.25618451236915,
+                    "x": 1634.1593093186186,
+                    "y": -255.60447020894043
+                },
+                "highlighted": [
+                ],
+                "op": "render.snapshot",
+                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/11_piece_introspection/piece_square_two.png",
+                "piece": "SquareTwo",
+                "pixelSize": {
+                    "height": 133,
+                    "width": 133
+                },
+                "skippedHighlights": [
+                ],
+                "status": "ok"
+            }
+        }
+    ]
+}

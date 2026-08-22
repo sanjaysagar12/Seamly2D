@@ -41,6 +41,16 @@
             "value": null
         },
         {
+            "error": {
+                "message": "Unknown piece: does-not-exist",
+                "piece": "does-not-exist",
+                "type": "unknownPiece"
+            },
+            "ok": false,
+            "op": "render.snapshot",
+            "value": null
+        },
+        {
             "error": "",
             "ok": true,
             "op": "pattern.dump",

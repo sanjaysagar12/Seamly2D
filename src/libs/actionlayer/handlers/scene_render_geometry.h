@@ -60,4 +60,18 @@ struct SceneRenderGeometry
 // DXF device that never allocates a pixel buffer) -- pass true only for a raster (QImage) target.
 SceneRenderGeometry computeSceneRenderGeometry(VMainGraphicsScene *scene, const QJsonObject &args, bool applyRasterCap); // Implemented in scene_render_geometry.cpp.
 
+// Same padding/aspect-ratio/raster-cap derivation as computeSceneRenderGeometry() above (which is
+// now a thin wrapper around this, using scene->itemsBoundingRect() as itemsRect), but starting from
+// an already-known scene-space rect instead of a whole scene's items. Added so render.snapshot's
+// "target": "piece" support (render_handlers.cpp) can crop to one piece's own graphics item's
+// sceneBoundingRect() -- a single item's bounds within ctx.pieceScene(), not that scene's full
+// itemsBoundingRect(), which would include every other assembled piece too -- while still sharing
+// the exact same sizing math as the "draft"-target/export.scene paths, instead of a third
+// independently-maintained copy of it. Always reports ok=true: unlike a whole scene, a resolved
+// graphics item's own bounding rect is never "empty" in the "nothing to render" sense
+// computeSceneRenderGeometry()'s scene->items().isEmpty() guards against; a genuinely
+// zero-area item (e.g. a perfectly degenerate rect) still produces a valid, if visually trivial,
+// crop rather than a meaningful error.
+SceneRenderGeometry computeRenderGeometryForRect(const QRectF &itemsRect, const QJsonObject &args, bool applyRasterCap); // Implemented in scene_render_geometry.cpp.
+
 #endif // SCENE_RENDER_GEOMETRY_H // End of include guard started above.

@@ -8,6 +8,91 @@ See also [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the standal
 decision and [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md) for the
 full op reference.
 
+## Phase 13 — Piece introspection (`piece.list`, `piece.dump`) + `render.snapshot` `target: "piece"`
+
+- **Closes the `render.snapshot` "no piece scene yet" gap** `render_handlers.h`/`.cpp` had
+  documented inline since Phase 8: `ActionContext` gained `pieceScene()` in that same phase (for
+  `piece_handlers.cpp`'s assembly ops), but `render.snapshot` itself was never updated to use it —
+  `target` accepted only `"draft"`, hard-erroring on anything else. New `target: "piece"` value
+  (requires a new `"piece"` name-or-id parameter) crops to one piece's own `PatternPieceTool`
+  graphics item — `sceneBoundingRect()` plus the existing `"padding"` parameter, not
+  `ctx.pieceScene()`'s whole `itemsBoundingRect()`, which would show every assembled piece at once.
+  Locates the item via the same `VAbstractPattern::getTool(id)` idiom the `"highlight"` resolution
+  already used (a piece's own id doubles as its `PatternPieceTool`'s registered tool id — see
+  `PatternPieceTool::Create()`, `pattern_piece_tool.cpp:152`/`181`).
+- **Found and fixed a real, if narrow, correctness bug while wiring this up, not merely a
+  hypothetical:** `"highlight"` names are resolved via the `Draw::Calculation` scope, so a
+  resolved name's live graphics item is only ever added to the *draft* scene — never
+  `ctx.pieceScene()`. Before this phase, a `target: "piece"` render with a `"highlight"` entry
+  would have computed that (draft-scene) item's `sceneBoundingRect()` and silently transformed it
+  into the *piece* render's pixel space anyway — the exact "wrong scene, wrong place" class of bug
+  `render_handlers.cpp`'s own pre-existing `Draw::Modeling` comment already warned about for a
+  different case. Fixed by checking `item->scene() == scene` (whichever scene is actually being
+  rendered) before accepting a highlight; for `target: "piece"` this correctly, cleanly reports
+  every `"highlight"` name as skipped rather than drawing it in the wrong place. `showPointNames`
+  needed no equivalent fix — verified it is already scene-agnostic (a global `qApp->Settings()`
+  flag every point's own paint code reads).
+- Extracted `computeSceneRenderGeometry()`'s padding/aspect-ratio/raster-cap math (previously only
+  callable against a whole `VMainGraphicsScene`) into a new `computeRenderGeometryForRect()`
+  (`scene_render_geometry.h`/`.cpp`), taking an already-known scene-space rect instead — the
+  original function is now a thin wrapper over it. Lets `target: "piece"` share the exact same
+  sizing rules `target: "draft"`/`export.scene` already use, instead of a third
+  independently-maintained copy.
+- **New ops: `piece.list`** (no args → `{"pieces": [{"id","name","nodeCount","seamAllowance"}]}`)
+  **and `piece.dump`** (`{"piece": "<name or id>"}` → the piece's main-path nodes, internal paths,
+  and anchors, each node reporting `{"id","type","reverse","name"?,"x"?,"y"?,"unsupported"?}`).
+  Both read-only, registered under category `"introspection"`. Pieces are not `VGObject`s
+  (`VContainer::DataPieces()` is a separate hash from `DataGObjects()`), so `pattern.dump` never
+  lists them — an AI caller previously had no way to discover a piece's name/id without already
+  knowing it, or to inspect a piece's own assembled structure at all short of re-deriving it from
+  `pattern.dump`'s flat object list by hand.
+- `toolToString()` (`Tool` enum → its C++ name) moved from `pattern_dump_handler.cpp`-local to
+  declared in `pattern_dump_handler.h` (alongside the pre-existing `goTypeToString()`), so
+  `piece_dump_handler.cpp` reuses the exact same per-node-type stringification `pattern.dump`'s own
+  history entries already use, instead of a second, potentially-drifting copy.
+- **Confirmed, not assumed, that the arc/curve-node gap `piece_handlers.h` documents for
+  `piece.addPatternPiece`/`piece.internalPath`'s `"nodes"` *creation* does not extend to
+  `piece.dump`'s *reading* of an existing piece.** Found while working with a real,
+  interactively-authored multi-piece master pattern (an Aldrich block-style basic-blocks file —
+  seven pieces, some with genuine `NodeArc`/`NodeSpline` main-path nodes alongside `NodePoint`
+  ones) rather than the mostly single-piece, from-scratch fixtures this action layer had been
+  tested against so far: `VContainer::GetGObject()` resolves an arc/spline piece-node clone's
+  identity (id/name) without error even though this action layer cannot construct one itself —
+  `piece.dump` reports such a node with `"unsupported": true` (never crashing or silently dropping
+  it), while its ordinary `NodePoint` siblings in the same list still resolve full coordinates
+  normally. Verified directly against a real `actiond` run before writing the regression check
+  below, not inferred from reading the parser code alone.
+- New fixtures: `tests/actionlayer/fixtures/patterns/Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d` +
+  `tests/actionlayer/fixtures/measurements/Aldrich-Womens-MultiSize-06-14.smms`, a real
+  GUI-authored multi-piece pattern (see the finding above) — **provenance/licensing was not
+  independently re-verified by this change**; the files were already present, uncommitted, in
+  `examples/actionlayer/piece_groups/` when this phase began (Aldrich is a long-published, widely
+  reproduced drafting-book block set), and are copied here on that basis; flagged for a human
+  reviewer to confirm before merge, not asserted as clear. `run_batch`'s single-case-mode argument
+  classifier now also recognizes `.sm2d` as a pattern-file extension (alongside `.val`) — the same
+  XML schema `VPattern::Parse()` already reads regardless of extension, so this is not a new
+  format, just letting the CLI accept a real `.sm2d` path the way it already accepts `.val`.
+- New `tests/actionlayer/scripts/11_piece_introspection.json` — builds two non-overlapping closed
+  squares as separate pieces from scratch (against the default `blank.val` fixture, keeping it
+  independent of every other case), then exercises `piece.list`, `piece.dump` (round-trip: the
+  dumped main-path node coordinates match the points the script itself created earlier in the same
+  script), and `render.snapshot target: "piece"` against each piece in turn. The two rendered PNGs
+  were opened and eyeballed (not just checked for existence) before committing their golden
+  copies: each crop shows exactly one square, tight to its own bounds, with no bleed from the
+  other piece 300 units away.
+- `render.snapshot target: "piece"` against a nonexistent piece name added to
+  `scripts/07_error_cases.json` — confirms a clean, structured `unknownPiece` error (mirroring
+  `piece.dump`'s own), not a crash or a silent fallback to the draft scene.
+- New bespoke check in `run_batch/main.cpp`, `checkPieceDumpRealFile()` (same pattern as the
+  pre-existing `checkListToolsAi()`/`checkMeasurementsPathRegression()`, needed because the
+  no-argument suite loop always pairs every `scripts/*.json` case against the *default* fixtures,
+  with no per-case override): runs `piece.list`/`piece.dump` against the real Aldrich fixtures
+  above and asserts the 7-piece count and the unsupported-curve-node finding described above,
+  giving that finding permanent regression coverage rather than a one-off manual confirmation.
+- `docs/action-layer-schema.md` gained the `piece.list`/`piece.dump` entries, the extended
+  `render.snapshot` `target`/new `piece` parameter documentation, and an updated coverage summary
+  (51 ops total, up from 49).
+
 ## Phase 12 — Undo (`pattern.undo`)
 
 - **A first design was built, verified working, and then deliberately abandoned in favor of the

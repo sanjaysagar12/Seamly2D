@@ -26,13 +26,15 @@
 
 #include "../action_context.h" // Brings in ActionContext, supplying the scene/doc/data this handler reads.
 #include "../name_resolver.h"  // Brings in NameResolver::idForName(), used to resolve "highlight" entries to ids.
-#include "scene_render_geometry.h" // Brings in computeSceneRenderGeometry(), the padding/sizing derivation this handler now shares with export_handlers.cpp instead of computing inline.
+#include "scene_render_geometry.h" // Brings in computeSceneRenderGeometry()/computeRenderGeometryForRect(), the padding/sizing derivation this handler shares with export_handlers.cpp (whole-scene target) and now also uses directly for a single piece item's bounds (target: "piece").
 
 #include "../../vwidgets/vmaingraphicsscene.h" // Brings in the full VMainGraphicsScene definition (a QGraphicsScene) so itemsBoundingRect()/render() are callable.
-#include "../../ifc/xml/vabstractpattern.h"    // Brings in VAbstractPattern::getTool(id), used to look up a highlighted object's live tool instance.
+#include "../../ifc/xml/vabstractpattern.h"    // Brings in VAbstractPattern::getTool(id), used to look up a highlighted object's live tool instance, and (target: "piece") a piece's own PatternPieceTool instance.
 #include "../../ifc/exception/vexception.h"    // Brings in VExceptionBadId, thrown by getTool() for an id with no registered tool.
 #include "../../vmisc/vabstractapplication.h"  // Brings in the qApp macro and VAbstractApplication::Settings(), mirroring mainwindowsnogui.cpp's export functions.
 #include "../../vmisc/vcommonsettings.h"       // Brings in VCommonSettings::getLabelFont()/getExportQuality(), used exactly as mainwindowsnogui.cpp's exportPNG() etc. do.
+#include "../../vpatterndb/vcontainer.h"       // Brings in VContainer::DataPieces(), used to resolve "target": "piece"'s "piece" name-or-id argument.
+#include "../../vpatterndb/vpiece.h"           // Brings in VPiece::GetName(), read while resolving "piece" by name.
 
 // VDataTool's full definition is required (not just a forward declaration) for the
 // dynamic_cast<QGraphicsItem *> below to work: dynamic_cast needs to see the source type is
@@ -146,27 +148,123 @@ namespace
     private:
         bool m_previous;
     };
+
+    // Resolves the "piece" argument of a "target": "piece" render.snapshot call to a piece id.
+    // Accepts either a JSON string (piece name, matched against VPiece::GetName() -- pieces are not
+    // VGObjects, so VContainer::DataPieces() is scanned directly, the same idiom piece_handlers.cpp's
+    // own file-local resolvePieceId() uses for piece.addAnchorPoint/internalPath/insertNodes/union;
+    // duplicated here rather than shared, matching this codebase's existing convention of a small,
+    // file-local helper per handler file instead of a cross-file utility header -- see e.g.
+    // structuredError(), duplicated verbatim across nine of this directory's handler files) or a
+    // JSON number (piece id, taken literally and checked against DataPieces() rather than trusted
+    // blind). Returns false (leaving outId untouched) if neither resolves to a known piece.
+    bool resolvePieceRefArg(const QJsonValue &pieceArg, const VContainer *data, quint32 &outId)
+    {
+        const QHash<quint32, VPiece> *pieces = data->DataPieces();
+        if (pieces == nullptr)
+        {
+            return false;
+        }
+        if (pieceArg.isDouble()) // A numeric "piece" value is taken as a literal piece id.
+        {
+            const quint32 id = static_cast<quint32>(pieceArg.toDouble());
+            if (pieces->contains(id))
+            {
+                outId = id;
+                return true;
+            }
+            return false;
+        }
+        const QString name = pieceArg.toString(); // Otherwise treated as a piece name.
+        for (auto it = pieces->constBegin(); it != pieces->constEnd(); ++it)
+        {
+            if (it.value().GetName() == name)
+            {
+                outId = it.key();
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
-// Implements "render.snapshot": rasterizes ctx.scene() (the draft scene) to an image file,
-// optionally overlaying semi-transparent highlight rectangles over named objects and/or forcing
-// point-name labels (e.g. "A1", "A2") on or off via "showPointNames", and returns metadata
-// describing what was written. Every failure path returns ActionResult::failure() with a specific,
-// actionable message instead of throwing or crashing, matching the convention the registry/engine
-// already rely on (see ActionEngine::run()'s own "Unknown action op" handling).
+// Implements "render.snapshot": rasterizes either ctx.scene() (the draft scene, "target": "draft",
+// the default) or, cropped to one named/id'd piece's own graphics item, ctx.pieceScene() ("target":
+// "piece") to an image file, optionally overlaying semi-transparent highlight rectangles over named
+// objects and/or forcing point-name labels (e.g. "A1", "A2") on or off via "showPointNames", and
+// returns metadata describing what was written. Every failure path returns ActionResult::failure()
+// with a specific, actionable message instead of throwing or crashing, matching the convention the
+// registry/engine already rely on (see ActionEngine::run()'s own "Unknown action op" handling).
 ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &ctx)
 {
     // --- target -----------------------------------------------------------------------------
-    const QString target = args.value(QStringLiteral("target")).toString(QStringLiteral("draft")); // Which scene to render; "draft" is the only one ActionContext currently exposes.
-    if (target != QStringLiteral("draft")) // ActionContext holds a single VMainGraphicsScene*, populated with the draft scene by every current host (see action_host.cpp); there is no piece scene to render yet.
+    const QString target = args.value(QStringLiteral("target")).toString(QStringLiteral("draft")); // Which scene to render.
+    if (target != QStringLiteral("draft") && target != QStringLiteral("piece")) // Anything else is a hard error, not a silent fallback.
     {
-        return ActionResult::failure(QStringLiteral("unsupported target: '%1' (only 'draft' is available; ActionContext exposes no piece scene yet)").arg(target)); // Explicit error instead of silently ignoring the param.
+        return ActionResult::failure(QStringLiteral("unsupported target: '%1' (expected 'draft' or 'piece')").arg(target));
     }
 
-    VMainGraphicsScene *scene = ctx.scene(); // The (only) scene this phase can render.
-    if (scene == nullptr) // Guard against a context constructed without a scene (e.g. some test contexts).
+    VMainGraphicsScene *scene = nullptr; // Resolved below, depending on target; both branches guard it non-null before use.
+    QString resolvedPieceName; // Only populated for target=="piece"; echoed back in the success payload's "piece" field.
+    QGraphicsItem *pieceItem = nullptr; // Only populated for target=="piece"; that piece's own graphics item, used both for the crop rect below and (implicitly, via its ->scene()) for the highlight-scoping check further down.
+
+    if (target == QStringLiteral("draft"))
     {
-        return ActionResult::failure(QStringLiteral("render.snapshot requires a scene, but none is available in this context")); // Clear, actionable reason.
+        scene = ctx.scene();
+        if (scene == nullptr) // Guard against a context constructed without a scene (e.g. some test contexts).
+        {
+            return ActionResult::failure(QStringLiteral("render.snapshot requires a scene, but none is available in this context")); // Clear, actionable reason.
+        }
+    }
+    else // target == "piece"
+    {
+        if (!args.contains(QStringLiteral("piece"))) // Required only for this target; "draft" never needs it.
+        {
+            return ActionResult::failure(QStringLiteral("render.snapshot requires a \"piece\" (name or id) when target is \"piece\""));
+        }
+
+        VContainer *data = ctx.data();
+        if (data == nullptr)
+        {
+            return ActionResult::failure(QStringLiteral("render.snapshot: context is missing a data container"));
+        }
+
+        quint32 pieceId = 0;
+        if (!resolvePieceRefArg(args.value(QStringLiteral("piece")), data, pieceId))
+        {
+            QJsonObject error;
+            error["type"] = QStringLiteral("unknownPiece");
+            error["message"] = QStringLiteral("Unknown piece: %1").arg(args.value(QStringLiteral("piece")).toVariant().toString());
+            error["piece"] = args.value(QStringLiteral("piece"));
+            return ActionResult::failure(QJsonValue(error));
+        }
+        resolvedPieceName = data->DataPieces()->value(pieceId).GetName();
+
+        scene = ctx.pieceScene();
+        if (scene == nullptr) // Guard against a context built before Phase 8, or a test that never sets one up.
+        {
+            return ActionResult::failure(QStringLiteral("render.snapshot requires a piece scene for target \"piece\", but none is available in this context"));
+        }
+
+        // PatternPieceTool::Create() registers the tool at the same id VContainer::AddPiece()
+        // returned (see pattern_piece_tool.cpp), so the piece id resolved above doubles as its own
+        // tool id -- the identical getTool()-then-cross-cast idiom the "highlight" loop below (and
+        // pattern_dump_handler.cpp) already uses to reach a live tool's graphics item, just keyed by
+        // the piece's own id instead of a highlighted object's.
+        VDataTool *tool = nullptr;
+        try
+        {
+            tool = VAbstractPattern::getTool(pieceId);
+        }
+        catch (const VExceptionBadId &)
+        {
+            tool = nullptr;
+        }
+        pieceItem = dynamic_cast<QGraphicsItem *>(tool);
+        if (pieceItem == nullptr)
+        {
+            return ActionResult::failure(QStringLiteral("render.snapshot: piece '%1' has no graphics item to render").arg(resolvedPieceName));
+        }
     }
 
     // --- path ---------------------------------------------------------------------------------
@@ -209,11 +307,17 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
     }
 
     // --- padding / bounding box / pixel size ---------------------------------------------------
-    // Shared with export_handlers.cpp's handleExportScene(); see scene_render_geometry.h for the
-    // exact padding/aspect-ratio/raster-cap rules this applies (unchanged from before this was
-    // extracted -- applyRasterCap=true here preserves render.snapshot's original 4096px cap).
-    const SceneRenderGeometry geometry = computeSceneRenderGeometry(scene, args, /*applyRasterCap=*/true);
-    if (!geometry.ok) // Only false when the scene has no items at all.
+    // target=="draft": shared with export_handlers.cpp's handleExportScene(); see
+    // scene_render_geometry.h for the exact padding/aspect-ratio/raster-cap rules this applies
+    // (unchanged from before this was extracted -- applyRasterCap=true here preserves
+    // render.snapshot's original 4096px cap). target=="piece": crops to pieceItem's own
+    // sceneBoundingRect() instead of the whole (multi-piece) pieceScene's itemsBoundingRect() --
+    // see computeRenderGeometryForRect()'s own header comment -- so only that one piece's outline
+    // is rendered, not every assembled piece ctx.pieceScene() holds.
+    const SceneRenderGeometry geometry = (target == QStringLiteral("piece"))
+        ? computeRenderGeometryForRect(pieceItem->sceneBoundingRect(), args, /*applyRasterCap=*/true)
+        : computeSceneRenderGeometry(scene, args, /*applyRasterCap=*/true);
+    if (!geometry.ok) // Only false for target=="draft" against a scene with no items at all; computeRenderGeometryForRect() always reports ok=true (see its own header comment).
     {
         return ActionResult::failure(QStringLiteral("empty scene, nothing to render")); // Structured error rather than producing a degenerate (0x0 or blank) image.
     }
@@ -298,7 +402,27 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
             continue; // Move on to the next requested name.
         }
 
-        highlighted.append(name); // This name resolved to a real, drawable graphics item.
+        // "highlight" names are always resolved via the Draw::Calculation scope above, so their
+        // live tool's graphics item is only ever added to ctx.scene() (the draft scene) --
+        // piece_handlers.cpp never adds a Draw::Calculation object's own item to ctx.pieceScene(),
+        // only piece-node *clones* (Draw::Modeling) and the piece assemblies themselves. For
+        // target=="draft" that always matches `scene` (itself ctx.scene()) and this check is a
+        // no-op; for target=="piece" (`scene` is ctx.pieceScene()) it never matches, so every
+        // "highlight" name is cleanly skipped here instead of resolving to a real item whose
+        // sceneBoundingRect() is in the *draft* scene's coordinate space -- which the pixel-space
+        // transform below would otherwise silently misinterpret as being in the piece scene's,
+        // drawing the overlay in the wrong place rather than failing visibly (the exact class of
+        // bug the Draw::Calculation scoping comment above already guards against for the
+        // Draw::Modeling case; this generalizes the same guard to "is this item even in the scene
+        // being rendered at all").
+        if (item->scene() != scene)
+        {
+            qWarning() << "render.snapshot: highlight target's graphics item is not in the rendered scene:" << name;
+            skippedHighlights.append(name);
+            continue;
+        }
+
+        highlighted.append(name); // This name resolved to a real, drawable graphics item in the scene being rendered.
         highlightRects.append(item->sceneBoundingRect()); // Its scene-space bounds, transformed to image pixels after the main render below.
     }
 
@@ -373,6 +497,10 @@ ActionResult handleRenderSnapshot(const QJsonObject &args, const ActionContext &
     payload["op"] = QStringLiteral("render.snapshot");   // Redundant with the engine's own envelope "op" field, but explicitly requested in this op's documented payload shape.
     payload["status"] = QStringLiteral("ok");             // Ditto: mirrors the engine's "ok" field for a caller reading only the payload.
     payload["path"] = pathInfo.absoluteFilePath();         // Resolved absolute path actually written to.
+    if (target == QStringLiteral("piece")) // Only present for this target -- keeps the "draft"-target payload shape (and every existing golden file for it) unchanged.
+    {
+        payload["piece"] = resolvedPieceName; // The resolved piece's own name, so a caller who passed a numeric id can see what it named.
+    }
     payload["pixelSize"] = pixelSize;                      // Actual saved image dimensions.
     payload["boundingBox"] = boundingBox;                  // The padded scene-space rect that was rendered.
     payload["highlighted"] = highlighted;                  // Names successfully resolved and overlaid.

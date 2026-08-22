@@ -83,6 +83,8 @@ ActionResult handleListTools(const QJsonObject &args, const ActionContext &ctx)
     tools.append(QStringLiteral("mirrorByAxis"));                // Phase 8: mutating mirror-by-axis operation, implemented in operation_handlers.cpp.
     tools.append(QStringLiteral("group"));                       // Phase 8: mutating object-group creation, implemented in operation_handlers.cpp.
     tools.append(QStringLiteral("trueDarts"));                   // Phase 8: mutating true-darts creation, implemented in operation_handlers.cpp.
+    tools.append(QStringLiteral("piece.list"));                   // 22 Aug, 2026: read-only piece listing, implemented in piece_list_handler.cpp.
+    tools.append(QStringLiteral("piece.dump"));                   // 22 Aug, 2026: read-only single-piece dump, implemented in piece_dump_handler.cpp.
     tools.append(QStringLiteral("piece.addPatternPiece"));       // Phase 8: mutating pattern-piece assembly, implemented in piece_handlers.cpp.
     tools.append(QStringLiteral("piece.addAnchorPoint"));        // Phase 8: mutating piece anchor-point creation, implemented in piece_handlers.cpp.
     tools.append(QStringLiteral("piece.internalPath"));          // Phase 8: mutating piece internal-path creation, implemented in piece_handlers.cpp.
