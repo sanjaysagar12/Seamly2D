@@ -458,7 +458,11 @@ class AgentSession:
             text = f"{op_name} FAILED. Error: {outcome.get('error')}. Fix the arguments and retry.{snapshot_note}"
 
         content: list[dict[str, Any]] = [{"type": "text", "text": text}]
-        if image_block is not None:
+        # Anthropic rejects a tool_result outright if is_error is true and content
+        # contains anything but text blocks -- so a failed action can only carry the
+        # snapshot back to the model on its *next* successful action's tool_result,
+        # not on this one.
+        if image_block is not None and success:
             content.append(image_block)
 
         return {

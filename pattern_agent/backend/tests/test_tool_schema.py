@@ -68,9 +68,10 @@ async def test_catalog_shape_and_known_ops():
     # own internal use, even though it's excluded from the model-facing tool list.
     assert catalog["op_metadata"]["render.snapshot"]["name"] == "render.snapshot"
 
-    # 48 real ops - 4 excluded (piece.union, render.snapshot, session.save,
-    # session.close) + 1 synthetic (pattern.complete) = 45
-    assert len(tools) == 45
+    # 49 real ops (post session.undo/redo -> pattern.undo refactor) - 4 excluded
+    # (piece.union, render.snapshot, session.save, session.close) + 1 synthetic
+    # (pattern.complete) = 46
+    assert len(tools) == 46
 
     # Every sanitized name in name_map must round-trip to a real op or the synthetic
     # completion signal, and no two ops must sanitize to the same name (dot -> '_'

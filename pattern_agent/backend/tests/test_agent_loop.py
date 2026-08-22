@@ -155,6 +155,84 @@ async def test_full_loop_with_scripted_turns(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_actiond_level_failure_does_not_attach_image_to_error_tool_result(tmp_path):
+    """Regression test: unlike a schema-validation failure (which returns before ever
+    calling actiond), an actiond-level failure -- e.g. a well-formed call referencing a
+    point name that doesn't exist -- still falls through to _execute_tool's
+    render.snapshot call afterward. The real Anthropic API rejects a tool_result
+    outright if is_error is true and its content contains anything but text blocks
+    (400 "all content must be type `text` if `is_error` is true"), so that snapshot
+    must never be attached when the action itself failed.
+    """
+    catalog = await load_tool_catalog()
+    output_dir = tmp_path
+    actiond = ActiondSession(output_dir=output_dir)
+    await actiond.start()
+
+    events: list[dict] = []
+
+    async def emit(event):
+        events.append(event)
+
+    agent = AgentSession(
+        session_id="test-session-error-snapshot",
+        actiond=actiond,
+        client=None,
+        tools=catalog["anthropic_tools"],
+        op_metadata=catalog["op_metadata"],
+        name_map=catalog["name_map"],
+        output_dir=output_dir,
+        goal="Draw a line from a point that doesn't exist",
+        emit=emit,
+        step_limit=10,
+    )
+
+    scripted = ScriptedClaude(
+        [
+            _response(_text("First, a real point."), _tool_use(
+                "basePoint", name="A", x=0, y=0, draftBlock="front"
+            )),
+            # Passes schema validation (well-formed strings) but fails at actiond
+            # itself -- a genuine per-action runtime error, not a validation error.
+            _response(_tool_use("endLine", name="B", basePoint="NoSuchPoint", angle="0", length="10")),
+            _response(_tool_use("pattern_complete", summary="Stopping after the failed call.")),
+        ]
+    )
+    agent._call_claude = scripted  # type: ignore[method-assign]
+
+    await agent.initialize()
+    keep_going = True
+    turns = 0
+    while keep_going:
+        keep_going = await agent.run_step()
+        turns += 1
+        assert turns <= 10, "loop did not terminate"
+
+    assert_valid_message_history(agent.messages)
+
+    action_results = [e for e in events if e["type"] == "action_result"]
+    assert [r["success"] for r in action_results] == [True, False, True]
+
+    # Find the tool_result for the failed endLine call and assert it is text-only.
+    error_tool_results = [
+        block
+        for message in agent.messages
+        if isinstance(message.get("content"), list)
+        for block in message["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error")
+    ]
+    assert error_tool_results, "expected at least one is_error tool_result in the transcript"
+    for result in error_tool_results:
+        content = result["content"]
+        if isinstance(content, str):
+            continue
+        assert all(block["type"] == "text" for block in content), (
+            f"is_error tool_result must be text-only, got block types "
+            f"{[block['type'] for block in content]}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_step_limit_stops_the_loop(tmp_path):
     catalog = await load_tool_catalog()
     output_dir = tmp_path
