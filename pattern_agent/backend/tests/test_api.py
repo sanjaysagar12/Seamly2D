@@ -296,6 +296,8 @@ async def test_session_pieces_and_piece_snapshot_endpoints(monkeypatch):
         assert resp.status_code == 200, resp.text
         assert [p["name"] for p in resp.json()["pieces"]] == ["Front"]
 
+        assert design_session.agent.current_piece is None
+
         resp = await client.get(f"/api/sessions/{session_id}/pieces/Front/snapshot")
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -303,8 +305,47 @@ async def test_session_pieces_and_piece_snapshot_endpoints(monkeypatch):
         assert body["url"] == f"/files/{session_id}/piece_view_Front.png"
         assert (design_session.agent.output_dir / "piece_view_Front.png").exists()
 
+        # Switching pieces from the session page must also redirect the agent's own
+        # attention to that piece (see session_manager.render_piece_snapshot's
+        # docstring) -- broadcast as the same event the agent loop's own automatic
+        # snapshots use, so every connected client sees the switch too.
+        assert design_session.agent.current_piece == "Front"
+        piece_events = [e for e in design_session.history if e["type"] == "piece_snapshot_ready"]
+        assert piece_events and piece_events[-1]["piece"] == "Front"
+
         resp = await client.get(f"/api/sessions/{session_id}/pieces/NoSuchPiece/snapshot")
         assert resp.status_code == 400
+        # A failed switch must not clobber the last successful focus.
+        assert design_session.agent.current_piece == "Front"
+
+
+@pytest.mark.asyncio
+async def test_start_session_without_goal_starts_paused_regardless_of_autorun(monkeypatch):
+    """A session can start with no goal at all -- the user gives the real instruction
+    afterward via the session page's chat box. Since the very first agent turn is built
+    from the goal text, autorun must be forced off in that case even if the caller asked
+    for it, so the agent never has to improvise an action from nothing; the loop starts
+    for real once the first chat message lands (send_message's own auto_resume)."""
+    from app import config
+
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-invalid-test-key")
+    manager._client = None
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/sessions", json={"autorun": True})
+        assert resp.status_code == 200, resp.text
+        session_id = resp.json()["sessionId"]
+
+        design_session = manager.get(session_id)
+        assert design_session.run_task is None
+        assert design_session.agent.status == "paused"
+
+        # A blank/whitespace-only goal is treated the same as omitting it entirely.
+        resp = await client.post("/api/sessions", json={"goal": "   ", "autorun": True})
+        assert resp.status_code == 200, resp.text
+        session_id2 = resp.json()["sessionId"]
+        assert manager.get(session_id2).run_task is None
 
 
 @pytest.mark.asyncio

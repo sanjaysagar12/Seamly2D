@@ -146,12 +146,23 @@ class AgentSession:
     async def initialize(self) -> None:
         initial_image_block = await self._try_render_initial_snapshot()
 
-        goal_text = (
-            f"Goal: {self.goal}\n\n"
-            "Here is the current state of the pattern (a blank/near-empty draft if this "
-            "is a fresh session). Begin by reasoning about the first concrete action, "
-            "then call exactly one tool."
-        )
+        # A session can start with no goal at all -- the orchestrator (main.py's
+        # start_session) forces autorun off in that case, so this message just sits in
+        # history as context until the user's first chat message (inject_user_message)
+        # actually asks for something and resumes the loop for real.
+        if self.goal.strip():
+            goal_text = (
+                f"Goal: {self.goal}\n\n"
+                "Here is the current state of the pattern (a blank/near-empty draft if this "
+                "is a fresh session). Begin by reasoning about the first concrete action, "
+                "then call exactly one tool."
+            )
+        else:
+            goal_text = (
+                "No goal has been given yet. Here is the current state of the pattern "
+                "(a blank/near-empty draft if this is a fresh session). Wait -- do not call "
+                "any tool -- until the user's first instruction arrives."
+            )
         content: list[dict[str, Any]] = [{"type": "text", "text": goal_text}]
         if initial_image_block is not None:
             content.append(initial_image_block)

@@ -160,7 +160,11 @@ async def list_models():
 # ---------------------------------------------------------------------------
 
 class StartSessionRequest(BaseModel):
-    goal: str
+    # Optional: a session can start with no goal at all, letting the user describe what
+    # to draft afterward via the session page's chat box instead (session_manager.
+    # start_session forces autorun off in that case -- see below -- so the agent never
+    # burns a turn improvising against an empty goal before that first message arrives).
+    goal: Optional[str] = None
     measurementsFilename: Optional[str] = None
     patternFilename: Optional[str] = None
     stepLimit: Optional[int] = None
@@ -190,13 +194,20 @@ async def start_session(req: StartSessionRequest):
             raise HTTPException(404, f"Pattern file not found: {req.patternFilename}")
         pattern_path = candidate
 
+    goal = (req.goal or "").strip()
+    # With no goal, autorun is forced off regardless of what the caller asked for: the
+    # very first agent turn is built from goal_text (see agent_loop.initialize(), which
+    # already renders a blank goal as "wait for the user's first instruction"), so
+    # running immediately would force the model to invent an action from nothing. The
+    # session starts "paused" instead, waiting for the user's first chat message --
+    # send_message()'s own auto_resume then starts the loop for real.
     try:
         design_session = await manager.start_session(
-            goal=req.goal,
+            goal=goal,
             measurements_path=measurements_path,
             pattern_path=pattern_path,
             step_limit=req.stepLimit or config.DEFAULT_STEP_LIMIT,
-            autorun=req.autorun,
+            autorun=req.autorun and bool(goal),
             model=req.model,
             system_prompt=req.systemPrompt,
             focus_piece=req.focusPiece,
@@ -254,7 +265,11 @@ async def list_session_pieces(session_id: str):
 @app.get("/api/sessions/{session_id}/pieces/{piece}/snapshot")
 async def get_piece_snapshot(session_id: str, piece: str):
     """Renders (or re-renders) a close-up of one piece on demand -- the session page
-    calls this whenever the user switches which piece they're looking at."""
+    calls this whenever the user switches which piece they're looking at. Also
+    redirects the agent's own attention to this piece (see
+    SessionManager.render_piece_snapshot), so switching pieces here is how a user
+    working across several pieces in one session tells the agent which one to act on
+    next before sending a chat instruction."""
     try:
         result = await manager.render_piece_snapshot(session_id, piece)
     except SessionNotFoundError:

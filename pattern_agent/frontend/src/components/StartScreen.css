@@ -248,6 +248,12 @@ input[type='number'] {
   height: 15px;
 }
 
+.autorun-toggle-hint {
+  color: var(--ink-faint);
+  font-style: italic;
+  cursor: default;
+}
+
 .system-prompt-toggle {
   margin-bottom: 12px;
   padding-top: 0;

@@ -157,10 +157,9 @@ export function StartScreen({ onStarted }: Props) {
   }
 
   async function handleStart() {
-    if (!goal.trim()) {
-      setError('Describe what you want drafted first.')
-      return
-    }
+    // Goal is optional -- leaving it blank starts the session paused (see main.py's
+    // start_session, which forces autorun off with no goal) so the first real
+    // instruction can be given via the session page's chat box instead.
     setBusy(true)
     setError(null)
     try {
@@ -203,12 +202,12 @@ export function StartScreen({ onStarted }: Props) {
         </p>
 
         <label className="field-label" htmlFor="goal">
-          Design goal
+          Design goal (optional)
         </label>
         <textarea
           id="goal"
           className="goal-input"
-          placeholder="e.g. Draft a basic bodice front block using these measurements, with a simple scoop neckline."
+          placeholder="e.g. Draft a basic bodice front block using these measurements, with a simple scoop neckline. Leave blank to describe it via chat once the session starts."
           value={goal}
           onChange={(e) => setGoal(e.target.value)}
           rows={4}
@@ -336,10 +335,17 @@ export function StartScreen({ onStarted }: Props) {
           </div>
         </div>
 
-        <label className="autorun-toggle">
-          <input type="checkbox" checked={autorun} onChange={(e) => setAutorun(e.target.checked)} />
-          Run automatically (uncheck to step through manually for debugging)
-        </label>
+        {goal.trim() ? (
+          <label className="autorun-toggle">
+            <input type="checkbox" checked={autorun} onChange={(e) => setAutorun(e.target.checked)} />
+            Run automatically (uncheck to step through manually for debugging)
+          </label>
+        ) : (
+          <div className="autorun-toggle autorun-toggle-hint">
+            No goal yet -- the session will start paused. Send your first instruction from the chat
+            box once it opens.
+          </div>
+        )}
 
         <button
           type="button"

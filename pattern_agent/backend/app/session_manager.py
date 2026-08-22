@@ -14,7 +14,7 @@ from typing import Any
 
 import anthropic
 
-from . import config, db
+from . import config, db, events
 from .actiond_process import ActiondSession
 from .agent_loop import SNAPSHOT_HEIGHT, SNAPSHOT_WIDTH
 from .agent_loop import SYSTEM_PROMPT as DEFAULT_SYSTEM_PROMPT
@@ -257,10 +257,17 @@ class SessionManager:
         return outcome["result"]["pieces"]
 
     async def render_piece_snapshot(self, session_id: str, piece: str) -> dict[str, Any]:
-        """Renders a fresh, on-demand close-up of one piece -- used when the user
-        switches which piece they're looking at in the session page, independent of
-        whatever the agent loop's own automatic snapshots are doing."""
-        agent = self.get(session_id).agent
+        """Renders a fresh, on-demand close-up of one piece -- this is how the session
+        page's piece switcher both shows the user that piece *and* redirects the agent's
+        own attention to it (sets current_piece, same field piece.addPatternPiece/
+        piece.dump/etc. update -- see agent_loop._update_current_piece), so a user
+        working across several pieces in one session can switch which one the agent
+        acts on next, then say e.g. "add a dart here" via chat and have it land on the
+        right piece. Broadcasts the same piece_snapshot_ready event the agent loop's own
+        automatic snapshots use, so every connected client's view of "which piece is the
+        agent focused on" -- not just this caller's -- updates immediately."""
+        design_session = self.get(session_id)
+        agent = design_session.agent
         await agent._ensure_actiond_alive()
 
         # Path params always arrive as strings; actiond only treats a *JSON number* as a
@@ -277,7 +284,14 @@ class SessionManager:
         if outcome["status"] != "ok":
             raise ValueError(outcome.get("error") or "render.snapshot failed")
         resolved_piece = outcome["result"].get("piece", piece)
-        return {"piece": resolved_piece, "url": f"/files/{session_id}/{filename}"}
+        url = f"/files/{session_id}/{filename}"
+
+        agent.current_piece = resolved_piece
+        event = events.piece_snapshot_ready(session_id, agent.step, resolved_piece, url)
+        await design_session.broadcast(event)
+        await self._persist_session(design_session, event)
+
+        return {"piece": resolved_piece, "url": url}
 
     async def load_from_db(self) -> None:
         """Reconstructs every persisted session on backend startup -- metadata, the
