@@ -1,0 +1,377 @@
+{
+    "results": [
+        {
+            "error": "",
+            "ok": true,
+            "op": "basePoint",
+            "value": {
+                "id": 1,
+                "name": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 2,
+                "name": "B",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 3,
+                "name": "C",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "A",
+                "id": 4,
+                "secondPoint": "B"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "B",
+                "id": 5,
+                "secondPoint": "C"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "C",
+                "id": 6,
+                "secondPoint": "A"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "piece.addPatternPiece",
+            "value": {
+                "id": 10,
+                "name": "MyPiece",
+                "op": "piece.addPatternPiece"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 2,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 3,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 4,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 5,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 6,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 7,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 8,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 9,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 10,
+                        "tool": "Piece"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "0",
+                        "formulaLength": "100",
+                        "id": 2,
+                        "name": "B",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "90",
+                        "formulaLength": "100",
+                        "id": 3,
+                        "name": "C",
+                        "type": "Point",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 7,
+                        "name": "__pieceNode_7",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": 8,
+                        "name": "__pieceNode_8",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "id": 9,
+                        "name": "__pieceNode_9",
+                        "type": "Point",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    }
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.undo",
+            "value": {
+                "entries": [
+                    {
+                        "id": 10,
+                        "kind": "piece"
+                    }
+                ],
+                "remaining": 9,
+                "undone": 1
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                    {
+                        "draftBlock": "Front",
+                        "id": 1,
+                        "tool": "BasePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 2,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 3,
+                        "tool": "EndLine"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 4,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 5,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 6,
+                        "tool": "Line"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 7,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 8,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 9,
+                        "tool": "NodePoint"
+                    }
+                ],
+                "objects": [
+                    {
+                        "id": 1,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "0",
+                        "formulaLength": "100",
+                        "id": 2,
+                        "name": "B",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "formulaAngle": "90",
+                        "formulaLength": "100",
+                        "id": 3,
+                        "name": "C",
+                        "type": "Point",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 7,
+                        "name": "A",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": 8,
+                        "name": "B",
+                        "type": "Point",
+                        "x": 377.9527559055118,
+                        "y": 0
+                    },
+                    {
+                        "id": 9,
+                        "name": "C",
+                        "type": "Point",
+                        "x": 2.3142931637430297e-14,
+                        "y": -377.9527559055118
+                    }
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.undo",
+            "value": {
+                "entries": [
+                    {
+                        "id": 9,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 8,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 7,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 6,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 5,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 4,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 3,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 2,
+                        "kind": "tool"
+                    },
+                    {
+                        "id": 1,
+                        "kind": "draftBlock"
+                    }
+                ],
+                "remaining": 0,
+                "undone": 9
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.dump",
+            "value": {
+                "history": [
+                ],
+                "objects": [
+                ]
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.undo",
+            "value": {
+                "entries": [
+                ],
+                "remaining": 0,
+                "undone": 0
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "pattern.undo",
+            "value": {
+                "entries": [
+                ],
+                "remaining": 0,
+                "undone": 0
+            }
+        }
+    ]
+}

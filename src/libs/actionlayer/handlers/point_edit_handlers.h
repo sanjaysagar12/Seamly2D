@@ -54,18 +54,6 @@ class ActionContext; // Forward declaration; only used by const reference in the
 //     follow-up, not silently attempted here.
 // A field present in args but unsupported for the named point's actual tool type produces a
 // structured "unsupported" failure naming which field and why, rather than a silent no-op.
-//
-// Phase 12 (undo/redo) note: this is the one op in this action layer confirmed, by direct code
-// reading and a real actiond run (see tests/actionlayer/scripts/10_undo_redo.json), to push more
-// than one VUndoCommand from a single JSON action -- an endLine-created point given both "length"
-// and "angle" in the same call pushes two separate SaveToolOptions commands (SetFormulaLength()
-// then SetFormulaAngle(), each independently calling VDrawTool::SaveOption()). ActionEngine::run()
-// wraps the whole handler call in one QUndoStack macro regardless (see action_engine.cpp's
-// beginMutatingAction/endMutatingAction wiring), so a single "session.undo" still reverts both
-// fields together, verified by a real run. Also notable: unlike undoing an object's *creation*
-// (see session_undo_handlers.h's "CRITICAL, VERIFIED FINDING"), undoing this op's edit-in-place
-// change DOES correctly restore the live VContainer object's geometry, not just the DOM -- the
-// point's tool/id is never removed, only its attributes are rewritten back and re-read.
 ActionResult handlePointEdit(const QJsonObject &args, const ActionContext &ctx); // Implemented in point_edit_handlers.cpp.
 
 #endif // POINT_EDIT_HANDLERS_H // End of include guard started above.
