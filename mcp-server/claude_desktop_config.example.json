@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "seamly2d": {
+      "command": "node",
+      "args": ["C:/yoko/Seamly2D/mcp-server/dist/index.js"],
+      "env": {
+        "ACTIOND_COMMAND": "[\"C:/yoko/Seamly2D/build/src/app/actiond/bin/actiond.exe\"]"
+      }
+    },
+    "seamly2d-docker": {
+      "command": "node",
+      "args": ["C:/yoko/Seamly2D/mcp-server/dist/index.js"],
+      "env": {
+        "ACTIOND_COMMAND": "[\"docker\",\"run\",\"-i\",\"--rm\",\"-v\",\"<session-dir>:/data/output\",\"seamly2d-actiond:latest\"]"
+      }
+    }
+  }
+}
