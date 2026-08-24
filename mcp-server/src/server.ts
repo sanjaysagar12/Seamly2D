@@ -12,9 +12,9 @@ const SERVER_INSTRUCTIONS = `This server drives Seamly2D's headless pattern-cons
 sewing patterns step by step and see a rendered snapshot after each change.
 
 IMPORTANT session rule: at the start of a new conversation, before calling any other pattern tool,
-call pattern_new_session and remember the returned session_id. Pass that exact session_id as the
-"session_id" argument on every other pattern/piece/point/curve/... tool call for the rest of THIS
-conversation. Never reuse a session_id you saw in a earlier conversation — each new conversation
+call pattern_new_session and remember the returned patternSessionId. Pass that exact patternSessionId as the
+"patternSessionId" argument on every other pattern/piece/point/curve/... tool call for the rest of THIS
+conversation. Never reuse a patternSessionId you saw in a earlier conversation — each new conversation
 must call pattern_new_session again to get its own fresh, blank pattern. When you are done with a
 pattern, call pattern_end_session to free the underlying process.
 
@@ -53,7 +53,12 @@ function isAutoRenderExcluded(entry: ToolCatalogEntry): boolean {
 
 const SESSION_ID_PROPERTY = {
   type: 'string',
-  description: 'Session id returned by pattern_new_session. Required on every call.',
+  // Deliberately not named "session_id" on the wire: some MCP clients special-case and strip
+  // any tool argument with that exact key (confirmed against Claude Desktop — every other
+  // argument on a call passed through untouched while a literal "session_id" key vanished
+  // every single time), presumably conflating it with the transport-level Mcp-Session-Id
+  // concept even over stdio, where that concept doesn't apply. "patternSessionId" avoids it.
+  description: 'Pattern session id returned by pattern_new_session. Required on every call.',
 } as const;
 
 export function buildServer(catalog: ToolCatalogEntry[]): Server {
@@ -67,16 +72,16 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
     {
       name: 'pattern_new_session',
       description:
-        'Start a brand-new, isolated Seamly2D pattern session (blank pattern) and return its session_id. ' +
+        'Start a brand-new, isolated Seamly2D pattern session (blank pattern) and return its patternSessionId. ' +
         'Call this once at the start of every new conversation, before any other pattern tool call, and reuse ' +
-        'the returned session_id for every subsequent call in that conversation. Never reuse a session_id from ' +
+        'the returned patternSessionId for every subsequent call in that conversation. Never reuse a patternSessionId from ' +
         'an earlier conversation — always start a fresh session for a fresh conversation.',
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
     {
       name: 'pattern_end_session',
       description: 'End a pattern session and release its underlying actiond process. Call when a conversation is done with its pattern.',
-      inputSchema: { type: 'object', properties: { session_id: SESSION_ID_PROPERTY }, required: ['session_id'] },
+      inputSchema: { type: 'object', properties: { patternSessionId: SESSION_ID_PROPERTY }, required: ['patternSessionId'] },
     },
     {
       name: 'pattern_download_snapshot',
@@ -84,16 +89,16 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
       inputSchema: {
         type: 'object',
         properties: {
-          session_id: SESSION_ID_PROPERTY,
+          patternSessionId: SESSION_ID_PROPERTY,
           step: { type: 'number', description: 'Specific step number to fetch. Omit for the most recently rendered snapshot.' },
         },
-        required: ['session_id'],
+        required: ['patternSessionId'],
       },
     },
     {
       name: 'pattern_download_val',
       description: "Save the session's live pattern to a .val file and return it.",
-      inputSchema: { type: 'object', properties: { session_id: SESSION_ID_PROPERTY }, required: ['session_id'] },
+      inputSchema: { type: 'object', properties: { patternSessionId: SESSION_ID_PROPERTY }, required: ['patternSessionId'] },
     },
     {
       name: 'pattern_export_dxf',
@@ -101,14 +106,14 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
       inputSchema: {
         type: 'object',
         properties: {
-          session_id: SESSION_ID_PROPERTY,
+          patternSessionId: SESSION_ID_PROPERTY,
           dxfVersion: {
             type: 'string',
             description: `DXF version to export. Defaults to dxf-2013.`,
             enum: DXF_FORMATS,
           },
         },
-        required: ['session_id'],
+        required: ['patternSessionId'],
       },
     },
     {
@@ -119,7 +124,7 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
       inputSchema: {
         type: 'object',
         properties: {
-          session_id: SESSION_ID_PROPERTY,
+          patternSessionId: SESSION_ID_PROPERTY,
           measurements: {
             type: 'object',
             description: 'Map of measurement name to numeric value, e.g. {"height": 173, "bust_circ": 102}.',
@@ -128,7 +133,7 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
           unit: { type: 'string', description: 'Measurement unit. Defaults to "cm".' },
           pm_system: { type: 'string', description: 'Pattern-making system id. Defaults to "998".' },
         },
-        required: ['session_id', 'measurements'],
+        required: ['patternSessionId', 'measurements'],
       },
     },
   ];
@@ -144,10 +149,10 @@ export function buildServer(catalog: ToolCatalogEntry[]): Server {
     inputSchema: {
       type: 'object',
       properties: {
-        session_id: SESSION_ID_PROPERTY,
+        patternSessionId: SESSION_ID_PROPERTY,
         ...(entry.input_schema.properties ?? {}),
       },
-      required: ['session_id', ...(entry.input_schema.required ?? [])],
+      required: ['patternSessionId', ...(entry.input_schema.required ?? [])],
     },
   }));
 
@@ -197,9 +202,12 @@ function errorResult(message: string): CallToolResult {
 }
 
 function requireSessionId(args: Record<string, unknown>): string {
-  const id = args.session_id;
+  const id = args.patternSessionId;
   if (typeof id !== 'string' || id.length === 0) {
-    throw new Error('"session_id" is required. Call pattern_new_session first and pass its session_id.');
+    throw new Error(
+      '"patternSessionId" is required. Call pattern_new_session first and pass its patternSessionId. ' +
+        `(received argument keys: ${JSON.stringify(Object.keys(args))}, patternSessionId value: ${JSON.stringify(id)})`
+    );
   }
   return id;
 }
@@ -212,9 +220,9 @@ async function handleNewSession(sessions: SessionManager): Promise<CallToolResul
         type: 'text',
         text: JSON.stringify(
           {
-            session_id: session.id,
+            patternSessionId: session.id,
             message:
-              'New pattern session created with a blank pattern. Use this exact session_id for every ' +
+              'New pattern session created with a blank pattern. Use this exact patternSessionId for every ' +
               'subsequent pattern tool call in this conversation. Do not reuse it in a future conversation.',
           },
           null,
@@ -238,7 +246,7 @@ async function handleGeneratedAction(
 ): Promise<CallToolResult> {
   const id = requireSessionId(args);
   const session = sessions.get(id);
-  const { session_id: _drop, ...opArgs } = args;
+  const { patternSessionId: _drop, ...opArgs } = args;
   const action = { op: entry.name, ...opArgs };
   const needsRender = !isAutoRenderExcluded(entry);
 

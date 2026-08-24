@@ -68,9 +68,9 @@ process, so session boundaries are explicit tool calls, not something the protoc
 
 1. At the start of a conversation, the model calls `pattern_new_session` (no arguments), which
    spawns a fresh `actiond` daemon subprocess against a blank pattern in its own isolated
-   directory and returns a `session_id`.
-2. Every other tool call takes that `session_id` as a required argument.
-3. `pattern_end_session(session_id)` closes the daemon when the conversation is done with its
+   directory and returns a `patternSessionId`.
+2. Every other tool call takes that `patternSessionId` as a required argument.
+3. `pattern_end_session(patternSessionId)` closes the daemon when the conversation is done with its
    pattern. Sessions idle for longer than `MCP_SESSION_IDLE_TIMEOUT_MS` are auto-closed by a
    background reaper, so an abandoned/crashed chat doesn't leak `actiond` processes forever.
 
@@ -79,22 +79,30 @@ repeated in `pattern_new_session`'s own description), not something MCP enforces
 is expected to call `pattern_new_session` once per conversation and never reuse an id across
 conversations.
 
+**Why the parameter is called `patternSessionId`, not `session_id`:** an earlier version used
+`session_id`, and every tool call from Claude Desktop silently lost that one argument while every
+other argument on the same call passed through untouched — confirmed by inspecting the raw
+arguments the server actually received. Desktop appears to special-case and strip any tool
+argument with that exact key, apparently conflating it with the transport-level `Mcp-Session-Id`
+concept from the Streamable HTTP transport, even over stdio where that concept doesn't apply.
+`patternSessionId` avoids the collision.
+
 ## Tools
 
 - **Auto-generated, one per `actiond` action op** (e.g. `basePoint`, `endLine`, `piece_union`,
   `pattern_undo`, ...): same name (`.` replaced with `_`) and parameters as `actiond --list-tools
-  --format=ai` reports, plus a required `session_id`. On success, any op outside the catalogue's
+  --format=ai` reports, plus a required `patternSessionId`. On success, any op outside the catalogue's
   `introspection` category (plus `session.close`/`session.save`) also returns a rendered PNG
   snapshot of the draft alongside the JSON result, batched into the same request as the action
   itself.
 - `pattern_new_session` / `pattern_end_session` — see above.
-- `pattern_download_snapshot(session_id, step?)` — re-fetch a snapshot already rendered this
+- `pattern_download_snapshot(patternSessionId, step?)` — re-fetch a snapshot already rendered this
   session (most recent by default).
-- `pattern_download_val(session_id)` — saves and returns the live pattern as a `.val` file.
-- `pattern_export_dxf(session_id, dxfVersion?)` — exports the draft to DXF (default
+- `pattern_download_val(patternSessionId)` — saves and returns the live pattern as a `.val` file.
+- `pattern_export_dxf(patternSessionId, dxfVersion?)` — exports the draft to DXF (default
   `dxf-2013`; validated against the real `dxf-r10`..`dxf-2013` set before it ever reaches
   `actiond`).
-- `pattern_set_measurements(session_id, measurements, unit?, pm_system?)` — takes a flat
+- `pattern_set_measurements(patternSessionId, measurements, unit?, pm_system?)` — takes a flat
   `{name: value}` JSON object, generates the `.smis` measurement file `actiond` requires, and
   calls `measurements.sync` (load + recompute in one step). The raw `measurements_load` /
   `measurements_recompute` / `measurements_sync` tools (auto-generated, taking a file `path`)
@@ -119,8 +127,8 @@ set a blank pattern's measurement type explicitly.
 
 > **User:** Start a new pattern and draw a 10cm square starting at the origin.
 >
-> **Claude:** *(calls `pattern_new_session` → gets `session_id`)*
-> *(calls `basePoint` with `name: "A", x: 0, y: 0, draftBlock: "Front"`, session_id)* → sees the
+> **Claude:** *(calls `pattern_new_session` → gets `patternSessionId`)*
+> *(calls `basePoint` with `name: "A", x: 0, y: 0, draftBlock: "Front"`, patternSessionId)* → sees the
 > JSON result plus a snapshot PNG showing point A.
 > *(calls `endLine` three more times to walk `A → B → C → D`, each call showing the growing
 > square)*
@@ -129,7 +137,7 @@ set a blank pattern's measurement type explicitly.
 >
 > **User:** Looks good — give me the DXF.
 >
-> **Claude:** *(calls `pattern_export_dxf` with the session's `session_id`)* → returns the
+> **Claude:** *(calls `pattern_export_dxf` with the session's `patternSessionId`)* → returns the
 > `.dxf` file.
 
 ## Development

@@ -18,7 +18,7 @@ export interface Session {
 export class SessionNotFoundError extends Error {
   constructor(id: string) {
     super(
-      `No active pattern session for session_id "${id}". It may have been closed or reaped for inactivity. ` +
+      `No active pattern session for patternSessionId "${id}". It may have been closed or reaped for inactivity. ` +
         `Call pattern_new_session to start a new one — session ids never carry over between conversations.`
     );
   }
