@@ -774,9 +774,9 @@ void ActionRegistry::registerBuiltinActions()
                 QStringLiteral("Literal position offset (scene units), matching PatternPieceTool's own mx/my. Given together with or without \"my\": both are taken exactly as given (the other defaulting to 0), never adjusted. Omitting BOTH \"mx\" and \"my\" auto-places this piece clear of every other piece this session has already assembled (a simple non-overlapping layout, not a real cutting-layout optimization) -- without this, every piece built with no explicit position lands at the identical (0,0) spot, overlapping.")),
             param(QStringLiteral("my"), QStringLiteral("number"), false, QStringLiteral("See \"mx\".")),
             param(QStringLiteral("createGroup"), QStringLiteral("boolean"), false,
-                QStringLiteral("Literal flag: also create a group (see the \"group\" op) containing this piece's own original node points. Optional convenience, off by default -- the interactive GUI does not create one either, so this is not a correction of previously-broken behavior."), QStringLiteral("false")),
+                QStringLiteral("Literal flag: also create a group (see the \"group\" op) containing this piece's own original node points, named after this piece (or \"groupName\" if given). Defaults to true: unlike the interactive GUI, where a human builds groups by hand via the Group Manager's own \"+\" button, an action-layer-driven session has no one to do that, so pieces would otherwise leave the Group Manager permanently empty. Set to false to restore that no-group behavior."), QStringLiteral("true")),
             param(QStringLiteral("groupName"), QStringLiteral("string"), false,
-                QStringLiteral("Name for the group created by \"createGroup\"; defaults to this piece's own \"name\" if omitted. Ignored when \"createGroup\" is false/omitted.")),
+                QStringLiteral("Name for the group \"createGroup\" creates; defaults to this piece's own \"name\" if omitted. Ignored when \"createGroup\" is explicitly false.")),
         },
         QStringLiteral(R"({ "op": "piece.addPatternPiece", "name": "Square", "nodes": ["A", "B", "C", "D"], "seamAllowanceWidth": "10", "mx": 0, "my": 250, "createGroup": true })")));
 

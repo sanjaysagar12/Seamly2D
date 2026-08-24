@@ -164,6 +164,17 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
+                "group": {
+                    "id": 22,
+                    "name": "SquareOne",
+                    "op": "group",
+                    "sourceObjects": [
+                        "A",
+                        "B",
+                        "C",
+                        "D"
+                    ]
+                },
                 "id": 21,
                 "mx": 0,
                 "my": 377.9527559055118,
@@ -176,7 +187,18 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
-                "id": 26,
+                "group": {
+                    "id": 28,
+                    "name": "SquareTwo",
+                    "op": "group",
+                    "sourceObjects": [
+                        "E",
+                        "F",
+                        "G",
+                        "H"
+                    ]
+                },
+                "id": 27,
                 "mx": -1113.8582677165355,
                 "my": 377.9527559055118,
                 "name": "SquareTwo",
@@ -207,7 +229,7 @@
                         "seamAllowance": true
                     },
                     {
-                        "id": 26,
+                        "id": 27,
                         "name": "SquareTwo",
                         "nodeCount": 4,
                         "seamAllowance": true
@@ -222,7 +244,7 @@
             "value": {
                 "anchors": [
                     {
-                        "id": 27,
+                        "id": 29,
                         "name": "A",
                         "x": 0,
                         "y": 0
@@ -278,25 +300,17 @@
             "value": {
                 "anchors": [
                 ],
-                "id": 26,
+                "id": 27,
                 "internalPaths": [
                 ],
                 "name": "SquareTwo",
                 "nodes": [
                     {
-                        "id": 22,
-                        "name": "__pieceNode_22",
-                        "reverse": false,
-                        "type": "NodePoint",
-                        "x": 1511.8110236220473,
-                        "y": 0
-                    },
-                    {
                         "id": 23,
                         "name": "__pieceNode_23",
                         "reverse": false,
                         "type": "NodePoint",
-                        "x": 1889.763779527559,
+                        "x": 1511.8110236220473,
                         "y": 0
                     },
                     {
@@ -305,11 +319,19 @@
                         "reverse": false,
                         "type": "NodePoint",
                         "x": 1889.763779527559,
-                        "y": -377.9527559055118
+                        "y": 0
                     },
                     {
                         "id": 25,
                         "name": "__pieceNode_25",
+                        "reverse": false,
+                        "type": "NodePoint",
+                        "x": 1889.763779527559,
+                        "y": -377.9527559055118
+                    },
+                    {
+                        "id": 26,
+                        "name": "__pieceNode_26",
                         "reverse": false,
                         "type": "NodePoint",
                         "x": 1511.8110236220473,

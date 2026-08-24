@@ -180,6 +180,17 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
+                "group": {
+                    "id": 22,
+                    "name": "GoodRectangle",
+                    "op": "group",
+                    "sourceObjects": [
+                        "E",
+                        "F",
+                        "G",
+                        "H"
+                    ]
+                },
                 "id": 21,
                 "mx": 0,
                 "my": 302.3622047244095,

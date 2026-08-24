@@ -76,6 +76,15 @@ class ActionContext; // Forward declaration; only used by const reference in the
 // expects to be fully undoable by count should be aware "pattern.undo {"count": N}" will skip
 // straight past their effect, silently undoing an *older* entry instead once N reaches that deep --
 // flagged here at maximum visibility rather than left to be rediscovered by a confusing dump diff.
+// This gap got materially more likely to bite once "piece.addPatternPiece"'s own "createGroup"
+// option (piece_handlers.cpp) defaulted to true: undoing such a piece via "pattern.undo" reverses
+// the Tool::Piece entry (DeletePiece, above) but leaves that piece's own auto-created group behind
+// untouched, now referencing node ids the just-undone piece owned -- an orphaned group, not a
+// crash (nothing dereferences a dangling group member eagerly), but a real, visible discrepancy in
+// Group Manager after an undo. Not fixed here: doing so would mean either giving "group" its own
+// history entry (a real fix, but out of this scope) or having "pattern.undo" special-case
+// Tool::Piece to also remove any group it happens to have created, which would entangle two
+// otherwise-independent ops. Documented as a known follow-up, same as the two gaps above.
 //
 // WHY THIS HANDLER CANNOT, BY ITSELF, MAKE THE DELETION VISIBLE TO "pattern.dump"/
 // "render.snapshot"/name resolution: DelTool/DeletePiece/DeleteDraftBlock's own redo() methods

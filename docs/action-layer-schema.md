@@ -1491,13 +1491,13 @@ resolve to any known piece.
 | `fill` | string | no (default `FillNone`) | — | A raw default-constructed `VPiece` fill value is not one of `VAbstractTool::fills()`'s recognized values and crashes `PatternPieceTool::RefreshGeometry()`'s `QBrush` construction (reproduced and root-caused) — this default exists specifically to avoid that, mirroring the interactive dialog's own always-seeded fallback. |
 | `pieceColor` | string | no | — | Only set if given at all (no default applied). |
 | `mx` / `my` | number | no | literal | Position offset (scene units) — `PatternPieceTool::RefreshGeometry()` applies `setPos(piece.GetMx(), piece.GetMy())` on top of the piece's own node-derived local shape (`pattern_piece_tool.cpp:1586`). **Bug fix, not a new feature:** `PatternPieceTool::Create()` never assigns a piece a position beyond `VPiece`'s default-constructed `(0,0)` — the same way the interactive GUI leaves a human to drag each new piece to a clear spot afterward — so every piece built with no explicit `mx`/`my` used to land at the exact same position, overlapping every other piece built the same way (reproduced directly: two pieces from two independently-drafted, coordinate-overlapping draft blocks rendered completely on top of each other). Giving **either** `mx` **or** `my` (even just one) is always taken exactly as given (the other defaulting to `0`) with **no auto-placement involved at all** — never adjusted. Omitting **both** auto-places the piece clear of every other piece this session has already assembled, via a session-lifetime `PieceLayoutCursor` (a simple non-overlapping left-to-right "shelf" layout — explicitly *not* a real cutting-layout/bin-packing optimization, out of scope the same way `export.scene`'s own "Phase B" note already flags that as separate, larger work). The response always echoes back the position actually used (`"mx"`/`"my"`), whichever path produced it. |
-| `createGroup` | bool | no (default `false`) | literal | **Optional convenience, not a bug fix** — the interactive GUI's own `PatternPieceTool::Create()` creates no group either, so leaving this `false` is not "missing" previously-automatic behavior. When `true`, also creates a group (via `handleGroup()`, reused directly rather than reimplemented) containing this piece's own *original* node points (e.g. `"A"`/`"B"`/`"C"`/`"D"`) — not the piece's internal `"__pieceNode_<id>"`-named clones, which are never meant to be independently selected. A group-name collision (or any other `handleGroup()` failure) is reported via the response's `"groupError"` field rather than failing this whole action, since the piece itself has already been created successfully by that point. |
-| `groupName` | string | no | — | Name for the group `createGroup` creates; defaults to this piece's own `"name"` if omitted. Ignored when `createGroup` is false/omitted. |
+| `createGroup` | bool | no (default `true`) | literal | **Action-layer-specific usability addition, not a core-library bug fix.** `PatternPieceTool::Create()` itself never creates a group, even in the real, unmodified interactive GUI — a human there separately builds groups by hand via the Group Manager panel's own "+" button, an organizational step with no equivalent for a headless caller. Since this action layer has no human in the loop to perform that step, every multi-piece pattern built through it would otherwise leave the Group Manager permanently empty, unlike any comparable human-authored file — so this defaults **on**. When true, also creates a group (via `handleGroup()`, reused directly rather than reimplemented) containing this piece's own *original* node points (e.g. `"A"`/`"B"`/`"C"`/`"D"`) — not the piece's internal `"__pieceNode_<id>"`-named clones, which are never meant to be independently selected. A group-name collision (or any other `handleGroup()` failure) is reported via the response's `"groupError"` field rather than failing this whole action, since the piece itself has already been created successfully by that point. Set `false` to restore the old no-group behavior. |
+| `groupName` | string | no | — | Name for the group `createGroup` creates; defaults to this piece's own `"name"` if omitted. Ignored when `createGroup` is false. |
 
 **Example request:**
 ```json
 { "op": "piece.addPatternPiece", "name": "Square", "nodes": ["A", "B", "C", "D"],
-  "seamAllowanceWidth": "10", "mx": 0, "my": 250, "createGroup": true }
+  "seamAllowanceWidth": "10", "mx": 0, "my": 250 }
 ```
 
 **Example success response:**
@@ -1505,11 +1505,10 @@ resolve to any known piece.
 { "id": 37, "name": "Square", "mx": 0, "my": 250, "op": "piece.addPatternPiece",
   "group": { "id": 38, "name": "Square", "sourceObjects": ["A", "B", "C", "D"], "op": "group" } }
 ```
-`"group"` is only present when `createGroup` was `true` and group creation succeeded;
-`"groupError"` (a structured or plain error, matching `handleGroup()`'s own shape) is present
-instead if `createGroup` was `true` but group creation failed. Neither field is present when
-`createGroup` was omitted/`false` — the response shape is then byte-identical to before this
-option existed.
+`"group"` is present whenever `createGroup` succeeded (the default, unless explicitly set
+`false`); `"groupError"` (a structured or plain error, matching `handleGroup()`'s own shape) is
+present instead if group creation failed. Neither field is present when `createGroup: false` was
+given explicitly.
 
 **Known error cases:** plain strings for missing `name`/`<3` nodes/missing `seamAllowanceWidth`,
 or a resolved node that isn't a point; structured `nameResolution`; structured `invalidPiecePath`
@@ -1518,8 +1517,8 @@ the nodes don't form a simple closed polygon; structured `formulaError` for a ba
 `seamAllowanceWidth`; structured `crossDraftBlockReference` (see [Pieces](#pieces)'s own note
 above) if any node belongs to a different draft block than the currently active one — checked
 before `nodes` gets cloned into any modeling clone, so a rejection never leaves one dangling. A
-`createGroup: true` group-creation failure does **not** fail this action — see `"groupError"`
-above.
+group-creation failure (whether `createGroup` was left at its default `true` or set explicitly)
+does **not** fail this action — see `"groupError"` above.
 
 ### `piece.addAnchorPoint`
 

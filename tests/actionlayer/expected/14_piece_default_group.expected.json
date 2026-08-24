@@ -6,7 +6,7 @@
             "op": "basePoint",
             "value": {
                 "id": 1,
-                "name": "F1"
+                "name": "A"
             }
         },
         {
@@ -15,7 +15,7 @@
             "op": "endLine",
             "value": {
                 "id": 2,
-                "name": "F2",
+                "name": "B",
                 "op": "endLine"
             }
         },
@@ -25,7 +25,7 @@
             "op": "endLine",
             "value": {
                 "id": 3,
-                "name": "F3",
+                "name": "C",
                 "op": "endLine"
             }
         },
@@ -35,7 +35,7 @@
             "op": "endLine",
             "value": {
                 "id": 4,
-                "name": "F4",
+                "name": "D",
                 "op": "endLine"
             }
         },
@@ -44,9 +44,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "F1",
+                "firstPoint": "A",
                 "id": 5,
-                "secondPoint": "F2"
+                "secondPoint": "B"
             }
         },
         {
@@ -54,9 +54,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "F2",
+                "firstPoint": "B",
                 "id": 6,
-                "secondPoint": "F3"
+                "secondPoint": "C"
             }
         },
         {
@@ -64,9 +64,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "F3",
+                "firstPoint": "C",
                 "id": 7,
-                "secondPoint": "F4"
+                "secondPoint": "D"
             }
         },
         {
@@ -74,9 +74,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "F4",
+                "firstPoint": "D",
                 "id": 8,
-                "secondPoint": "F1"
+                "secondPoint": "A"
             }
         },
         {
@@ -86,21 +86,31 @@
             "value": {
                 "group": {
                     "id": 14,
-                    "name": "Front",
+                    "name": "PieceDefault",
                     "op": "group",
                     "sourceObjects": [
-                        "F1",
-                        "F2",
-                        "F3",
-                        "F4"
+                        "A",
+                        "B",
+                        "C",
+                        "D"
                     ]
                 },
                 "id": 13,
                 "mx": 0,
                 "my": 377.9527559055118,
-                "name": "Front",
+                "name": "PieceDefault",
                 "op": "piece.addPatternPiece"
             }
+        },
+        {
+            "error": {
+                "message": "Group already exists: PieceDefault",
+                "name": "PieceDefault",
+                "type": "groupExists"
+            },
+            "ok": false,
+            "op": "group",
+            "value": null
         },
         {
             "error": "",
@@ -108,7 +118,7 @@
             "op": "basePoint",
             "value": {
                 "id": 15,
-                "name": "B1"
+                "name": "E"
             }
         },
         {
@@ -117,7 +127,7 @@
             "op": "endLine",
             "value": {
                 "id": 16,
-                "name": "B2",
+                "name": "F",
                 "op": "endLine"
             }
         },
@@ -127,7 +137,7 @@
             "op": "endLine",
             "value": {
                 "id": 17,
-                "name": "B3",
+                "name": "G",
                 "op": "endLine"
             }
         },
@@ -137,7 +147,7 @@
             "op": "endLine",
             "value": {
                 "id": 18,
-                "name": "B4",
+                "name": "H",
                 "op": "endLine"
             }
         },
@@ -146,9 +156,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "B1",
+                "firstPoint": "E",
                 "id": 19,
-                "secondPoint": "B2"
+                "secondPoint": "F"
             }
         },
         {
@@ -156,9 +166,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "B2",
+                "firstPoint": "F",
                 "id": 20,
-                "secondPoint": "B3"
+                "secondPoint": "G"
             }
         },
         {
@@ -166,9 +176,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "B3",
+                "firstPoint": "G",
                 "id": 21,
-                "secondPoint": "B4"
+                "secondPoint": "H"
             }
         },
         {
@@ -176,9 +186,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "B4",
+                "firstPoint": "H",
                 "id": 22,
-                "secondPoint": "B1"
+                "secondPoint": "E"
             }
         },
         {
@@ -186,22 +196,24 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
-                "group": {
-                    "id": 28,
-                    "name": "Back",
-                    "op": "group",
-                    "sourceObjects": [
-                        "B1",
-                        "B2",
-                        "B3",
-                        "B4"
-                    ]
-                },
                 "id": 27,
                 "mx": 397.9527559055118,
                 "my": 377.9527559055118,
-                "name": "Back",
+                "name": "PieceNoGroup",
                 "op": "piece.addPatternPiece"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "group",
+            "value": {
+                "id": 28,
+                "name": "PieceNoGroup",
+                "op": "group",
+                "sourceObjects": [
+                    "E"
+                ]
             }
         },
         {
@@ -210,7 +222,7 @@
             "op": "basePoint",
             "value": {
                 "id": 29,
-                "name": "S1"
+                "name": "I"
             }
         },
         {
@@ -219,7 +231,7 @@
             "op": "endLine",
             "value": {
                 "id": 30,
-                "name": "S2",
+                "name": "J",
                 "op": "endLine"
             }
         },
@@ -229,7 +241,7 @@
             "op": "endLine",
             "value": {
                 "id": 31,
-                "name": "S3",
+                "name": "K",
                 "op": "endLine"
             }
         },
@@ -239,7 +251,7 @@
             "op": "endLine",
             "value": {
                 "id": 32,
-                "name": "S4",
+                "name": "L",
                 "op": "endLine"
             }
         },
@@ -248,9 +260,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "S1",
+                "firstPoint": "I",
                 "id": 33,
-                "secondPoint": "S2"
+                "secondPoint": "J"
             }
         },
         {
@@ -258,9 +270,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "S2",
+                "firstPoint": "J",
                 "id": 34,
-                "secondPoint": "S3"
+                "secondPoint": "K"
             }
         },
         {
@@ -268,9 +280,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "S3",
+                "firstPoint": "K",
                 "id": 35,
-                "secondPoint": "S4"
+                "secondPoint": "L"
             }
         },
         {
@@ -278,9 +290,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "S4",
+                "firstPoint": "L",
                 "id": 36,
-                "secondPoint": "S1"
+                "secondPoint": "I"
             }
         },
         {
@@ -290,19 +302,19 @@
             "value": {
                 "group": {
                     "id": 42,
-                    "name": "Side",
+                    "name": "CustomGroupName",
                     "op": "group",
                     "sourceObjects": [
-                        "S1",
-                        "S2",
-                        "S3",
-                        "S4"
+                        "I",
+                        "J",
+                        "K",
+                        "L"
                     ]
                 },
                 "id": 41,
-                "mx": 2000,
-                "my": 1000,
-                "name": "Side",
+                "mx": 795.9055118110236,
+                "my": 377.9527559055118,
+                "name": "PieceNamed",
                 "op": "piece.addPatternPiece"
             }
         },
@@ -312,7 +324,7 @@
             "op": "basePoint",
             "value": {
                 "id": 43,
-                "name": "G1"
+                "name": "M1"
             }
         },
         {
@@ -321,7 +333,7 @@
             "op": "endLine",
             "value": {
                 "id": 44,
-                "name": "G2",
+                "name": "M2",
                 "op": "endLine"
             }
         },
@@ -331,7 +343,7 @@
             "op": "endLine",
             "value": {
                 "id": 45,
-                "name": "G3",
+                "name": "M3",
                 "op": "endLine"
             }
         },
@@ -341,7 +353,7 @@
             "op": "endLine",
             "value": {
                 "id": 46,
-                "name": "G4",
+                "name": "M4",
                 "op": "endLine"
             }
         },
@@ -350,9 +362,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "G1",
+                "firstPoint": "M1",
                 "id": 47,
-                "secondPoint": "G2"
+                "secondPoint": "M2"
             }
         },
         {
@@ -360,9 +372,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "G2",
+                "firstPoint": "M2",
                 "id": 48,
-                "secondPoint": "G3"
+                "secondPoint": "M3"
             }
         },
         {
@@ -370,9 +382,9 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "G3",
+                "firstPoint": "M3",
                 "id": 49,
-                "secondPoint": "G4"
+                "secondPoint": "M4"
             }
         },
         {
@@ -380,9 +392,59 @@
             "ok": true,
             "op": "line",
             "value": {
-                "firstPoint": "G4",
+                "firstPoint": "M4",
                 "id": 50,
-                "secondPoint": "G1"
+                "secondPoint": "M1"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 51,
+                "name": "M5",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "endLine",
+            "value": {
+                "id": 52,
+                "name": "M6",
+                "op": "endLine"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "M2",
+                "id": 53,
+                "secondPoint": "M5"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "M5",
+                "id": 54,
+                "secondPoint": "M6"
+            }
+        },
+        {
+            "error": "",
+            "ok": true,
+            "op": "line",
+            "value": {
+                "firstPoint": "M6",
+                "id": 55,
+                "secondPoint": "M3"
             }
         },
         {
@@ -391,71 +453,83 @@
             "op": "piece.addPatternPiece",
             "value": {
                 "group": {
-                    "id": 56,
-                    "name": "Grouped",
+                    "id": 61,
+                    "name": "PieceM1",
                     "op": "group",
                     "sourceObjects": [
-                        "G1",
-                        "G2",
-                        "G3",
-                        "G4"
+                        "M1",
+                        "M2",
+                        "M3",
+                        "M4"
                     ]
                 },
-                "id": 55,
-                "mx": 795.9055118110236,
-                "my": 377.9527559055118,
-                "name": "Grouped",
+                "id": 60,
+                "mx": 0,
+                "my": 775.9055118110236,
+                "name": "PieceM1",
                 "op": "piece.addPatternPiece"
             }
         },
         {
             "error": "",
             "ok": true,
-            "op": "render.snapshot",
+            "op": "piece.addPatternPiece",
             "value": {
-                "boundingBox": {
-                    "height": 133.25618451236897,
-                    "width": 133.256184512369,
-                    "x": 122.34828569657142,
-                    "y": 122.34828569657142
+                "group": {
+                    "id": 67,
+                    "name": "PieceM2",
+                    "op": "group",
+                    "sourceObjects": [
+                        "M2",
+                        "M5",
+                        "M6",
+                        "M3"
+                    ]
                 },
-                "highlighted": [
-                ],
-                "op": "render.snapshot",
-                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/12_piece_placement_and_grouping/front_piece.png",
-                "piece": "Front",
-                "pixelSize": {
-                    "height": 133,
-                    "width": 133
-                },
-                "skippedHighlights": [
-                ],
-                "status": "ok"
+                "id": 66,
+                "mx": 20,
+                "my": 775.9055118110236,
+                "name": "PieceM2",
+                "op": "piece.addPatternPiece"
             }
         },
         {
             "error": "",
             "ok": true,
-            "op": "render.snapshot",
+            "op": "piece.list",
             "value": {
-                "boundingBox": {
-                    "height": 133.25618451236897,
-                    "width": 133.256184512369,
-                    "x": 520.3010416020833,
-                    "y": 122.34828569657142
-                },
-                "highlighted": [
-                ],
-                "op": "render.snapshot",
-                "path": "C:/yoko/Seamly2D/tests/actionlayer/output/12_piece_placement_and_grouping/back_piece.png",
-                "piece": "Back",
-                "pixelSize": {
-                    "height": 133,
-                    "width": 133
-                },
-                "skippedHighlights": [
-                ],
-                "status": "ok"
+                "pieces": [
+                    {
+                        "id": 13,
+                        "name": "PieceDefault",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 27,
+                        "name": "PieceNoGroup",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 41,
+                        "name": "PieceNamed",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 60,
+                        "name": "PieceM1",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    },
+                    {
+                        "id": 66,
+                        "name": "PieceM2",
+                        "nodeCount": 4,
+                        "seamAllowance": true
+                    }
+                ]
             }
         }
     ]

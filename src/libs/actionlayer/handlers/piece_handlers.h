@@ -170,13 +170,19 @@ class ActionContext;
 // same cursor has already placed -- a simple non-overlapping left-to-right "shelf" layout, not a
 // real cutting-layout optimization.
 //
-// "createGroup" (optional, default false -- an explicit opt-in convenience, never something that
-// "should" have happened automatically; the real GUI's own PatternPieceTool::Create() creates no
-// group either) creates a group containing the piece's own original node points (named "groupName"
-// if given, else this piece's own "name") by calling handleGroup() (operation_handlers.h) directly
-// -- reused, not reimplemented. A group-name collision (or any other handleGroup() failure) is
-// reported via the success payload's "groupError" field rather than failing this whole action: the
-// piece itself has already been created successfully by that point.
+// "createGroup" (optional, default true) creates a group containing the piece's own original node
+// points (named "groupName" if given, else this piece's own "name") by calling handleGroup()
+// (operation_handlers.h) directly -- reused, not reimplemented. Defaulting this on is an
+// action-layer-specific usability addition, NOT a fix to PatternPieceTool::Create() itself: that
+// tool never creates a group even in the real, unmodified interactive GUI (confirmed by reading
+// it) -- a human there separately builds groups by hand via the Group Manager panel's own "+"
+// button, an organizational step with no equivalent for a headless caller. Since this action layer
+// has no human in the loop to perform that step, every multi-piece pattern built through it would
+// otherwise have a permanently empty Group Manager, unlike any comparable human-authored file --
+// worth fixing at this layer even though nothing about the underlying piece creation is broken.
+// "createGroup": false restores the old no-group behavior. A group-name collision (or any other
+// handleGroup() failure) is reported via the success payload's "groupError" field rather than
+// failing this whole action: the piece itself has already been created successfully by that point.
 ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionContext &ctx);
 
 // Implements "piece.addAnchorPoint": {"point","piece"} -> {"id","point","piece","op"}. No scene

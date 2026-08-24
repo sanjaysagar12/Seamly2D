@@ -84,6 +84,17 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
+                "group": {
+                    "id": 14,
+                    "name": "Square",
+                    "op": "group",
+                    "sourceObjects": [
+                        "A",
+                        "B",
+                        "C",
+                        "D"
+                    ]
+                },
                 "id": 13,
                 "mx": 0,
                 "my": 377.9527559055118,
@@ -107,7 +118,7 @@
             "ok": true,
             "op": "piece.internalPath",
             "value": {
-                "id": 17,
+                "id": 18,
                 "op": "piece.internalPath",
                 "piece": "Square"
             }
@@ -185,13 +196,8 @@
                     },
                     {
                         "draftBlock": "Front",
-                        "id": 14,
-                        "tool": "AnchorPoint"
-                    },
-                    {
-                        "draftBlock": "Front",
                         "id": 15,
-                        "tool": "NodePoint"
+                        "tool": "AnchorPoint"
                     },
                     {
                         "draftBlock": "Front",
@@ -201,6 +207,11 @@
                     {
                         "draftBlock": "Front",
                         "id": 17,
+                        "tool": "NodePoint"
+                    },
+                    {
+                        "draftBlock": "Front",
+                        "id": 18,
                         "tool": "InternalPath"
                     }
                 ],
@@ -268,15 +279,8 @@
                         "y": -377.9527559055118
                     },
                     {
-                        "id": 14,
-                        "name": "A",
-                        "type": "Point",
-                        "x": 0,
-                        "y": 0
-                    },
-                    {
                         "id": 15,
-                        "name": "__pieceNode_15",
+                        "name": "A",
                         "type": "Point",
                         "x": 0,
                         "y": 0
@@ -284,6 +288,13 @@
                     {
                         "id": 16,
                         "name": "__pieceNode_16",
+                        "type": "Point",
+                        "x": 0,
+                        "y": 0
+                    },
+                    {
+                        "id": 17,
+                        "name": "__pieceNode_17",
                         "type": "Point",
                         "x": 377.9527559055118,
                         "y": -377.9527559055118

@@ -505,8 +505,16 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
         payload["my"] = my;
         payload["op"] = QStringLiteral("piece.addPatternPiece");
 
-        // "createGroup" (optional, default false -- see this op's own schema description in
-        // action_registry.cpp for why the default is off): reuses handleGroup() (operation_
+        // "createGroup" (optional, default true -- see this op's own schema description in
+        // action_registry.cpp for why the default is on): unlike the interactive GUI, where a
+        // human separately builds groups by hand via the Group Manager panel's own "+" button
+        // (PatternPieceTool::Create() itself never creates one -- confirmed true of the real,
+        // unmodified GUI, not just this action layer), the action engine has no human in the loop
+        // to perform that step, so a multi-piece pattern built entirely through this action layer
+        // would otherwise always have an empty Group Manager, unlike any comparable human-authored
+        // file. Defaulting this on gives every AI-assembled piece the same "one group per piece"
+        // organizational structure a human author typically builds manually (see e.g. the Aldrich
+        // fixture's own piece/group naming symmetry). Reuses handleGroup() (operation_
         // handlers.cpp/.h) directly rather than reimplementing its DOM-bookkeeping logic, exactly
         // the way that handler itself already reuses AddGroup::redo()'s (vtools/undocommands/
         // addgroup.cpp) non-undo-stack logic. Grouped by the ORIGINAL draft point names
@@ -520,7 +528,7 @@ ActionResult handlePieceAddPatternPiece(const QJsonObject &args, const ActionCon
         // pre-existing group) is reported alongside the success payload as "groupError" rather
         // than failing this whole action -- the piece really does exist either way, and reporting
         // this action as failed would misleadingly suggest otherwise.
-        if (args.value(QStringLiteral("createGroup")).toBool(false))
+        if (args.value(QStringLiteral("createGroup")).toBool(true))
         {
             const QString groupName = args.value(QStringLiteral("groupName")).toString(name);
             QJsonObject groupArgs;

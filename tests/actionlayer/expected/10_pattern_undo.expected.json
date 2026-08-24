@@ -64,6 +64,16 @@
             "ok": true,
             "op": "piece.addPatternPiece",
             "value": {
+                "group": {
+                    "id": 11,
+                    "name": "MyPiece",
+                    "op": "group",
+                    "sourceObjects": [
+                        "A",
+                        "B",
+                        "C"
+                    ]
+                },
                 "id": 10,
                 "mx": 0,
                 "my": 377.9527559055118,

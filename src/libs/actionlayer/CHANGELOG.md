@@ -8,6 +8,73 @@ See also [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for the standal
 decision and [`docs/action-layer-schema.md`](../../../docs/action-layer-schema.md) for the
 full op reference.
 
+## Phase 16 — `piece.addPatternPiece`'s `createGroup` now defaults to `true` (usability addition)
+
+- **Not a core-library bug fix — flagged explicitly so a future maintainer doesn't mistake it for
+  one.** Confirmed directly by reading `PatternPieceTool::Create()`
+  (`src/libs/vtools/tools/pattern_piece_tool.cpp:121-183`) that it never creates a group, in the
+  real, unmodified interactive GUI either — a human there builds groups by hand via the Group
+  Manager panel's own "+" button, an organizational step entirely separate from assembling the
+  piece itself. Aldrich's own 17 groups (`tests/actionlayer/fixtures/patterns/`
+  `Aldrich-Womens-6th-Ed-Basic-Blocks.sm2d`) exist because that file's human author did exactly
+  that, by hand, unrelated to any bug this phase closes.
+- **Why this needed fixing anyway:** the action engine has no human in the loop to perform that
+  manual step, so a multi-piece pattern built entirely through it would otherwise always leave the
+  Group Manager permanently empty, unlike any comparable human-authored file — worse to navigate
+  once opened in the real GUI, even though nothing about the underlying piece creation was ever
+  broken.
+- **Change:** `"createGroup"`'s default flipped from `false` (Phase 14, an opt-in convenience) to
+  `true`. `"createGroup": false` still restores the old no-group behavior exactly.
+  `piece_handlers.cpp`/`piece_handlers.h`/`action_registry.cpp`/`docs/action-layer-schema.md` all
+  updated to describe the new default; no schema/parameter shape changed, only which value is
+  assumed when the caller omits the field.
+- **Existing golden files updated, not silently left failing:** `06_piece_and_union.json`,
+  `10_pattern_undo.json`, `11_piece_introspection.json`, `12_piece_placement_and_grouping.json`, and
+  `13_cross_draft_block_error.json` all call `piece.addPatternPiece` at least once with no
+  `"createGroup"` given — each now gains a `"group"` field on that result (and every id created
+  afterward shifts by one per new group, since a group consumes an id the same way any other tool
+  does), reviewed by hand and re-recorded via `run_batch --update` rather than left to fail.
+  `12_piece_placement_and_grouping.json`'s own explicit `"createGroup": true` case is unaffected in
+  substance (redundant now, but harmless to leave as an explicit example).
+- **New `tests/actionlayer/scripts/14_piece_default_group.json`:** covers the default (no
+  `"createGroup"` given) creating a matching group; `"createGroup": false` still creating none;
+  `"groupName"` overriding the auto-created group's name; and two pieces built from one shared
+  draft block (mirroring `checkSharedDraftBlockMultiPieceRegression`'s own fixture in
+  `tests/actionlayer/run_batch/main.cpp`, sharing two points) each getting its own group scoped
+  exactly to its own node list, with no membership leaking between them despite the shared points.
+  Each successful group's real persistence in the DOM (not just an echoed JSON field) is confirmed
+  by immediately trying to create a second group under the same name via the plain `"group"` op and
+  expecting `"groupExists"`; the `"createGroup": false` case is confirmed in reverse — the same
+  follow-up call must *succeed*, proving no group was actually created for it.
+- **Verified against the real, unmodified interactive GUI, not just an in-process JSON assertion:**
+  opened `13_cross_draft_block_error`'s own saved `pattern.val` (the exact reported scenario — two
+  draft blocks, one piece, `"GoodRectangle"`, correctly assembled from its own block's points) in
+  `seamly2d.exe` directly. It loads with no error dialog. Directly inspecting the saved XML confirms
+  `<groups>` is nested inside `<draftBlock name="RectangleBlock">` — the identical structural
+  convention the real GUI-authored Aldrich file itself uses (one `<groups>` element per
+  `<draftBlock>`, not a single pattern-level element) — containing exactly one `<group
+  name="GoodRectangle">` whose four `<item object="…">` ids resolve, cross-checked against that same
+  draft block's own `<calculation>` points, to precisely `E`/`F`/`G`/`H` — `GoodRectangle`'s own
+  node list, no more and no fewer. A pixel-level screenshot confirming the Group Manager panel's
+  visible row list once `"RectangleBlock"` is the selected draft block was attempted but not
+  obtained cleanly: the pattern's saved `<groups>` is correctly scoped per-draft-block (matching
+  Aldrich), and the panel appears to only list the currently-*active* draft block's own groups, but
+  driving this build's `seamly2d.exe` Draft Block combo box to a non-default selection proved
+  unreliable to automate in this environment (Qt's `QComboBox` popup did not commit a selection
+  through any UI Automation pattern tried — `SelectionItemPattern.Select()`, `ValuePattern.SetValue()`,
+  `InvokePattern.Invoke()` — all silently no-opped despite the popup visibly opening and highlighting
+  the target entry). The structural/XML evidence above, plus this suite's own
+  `shared_draft_block_multi_piece`/`piece_dump_real_file` regression checks (which reload through
+  the identical `VPattern::Parse()` codepath the interactive GUI itself uses), are what this phase
+  relies on instead — flagged here as a known verification gap, not a silently-skipped step.
+- **Also documented, not fixed (out of this phase's scope):** `history_undo_handlers.h`'s own
+  pre-existing "group has no history entry" gap now bites far more often with this default flipped
+  — undoing a piece built with (now-default) `createGroup: true` via `pattern.undo` reverses the
+  piece itself but leaves its auto-created group behind, orphaned, referencing the just-deleted
+  piece's own node ids. Not a crash; a real, visible Group-Manager discrepancy after an undo.
+  Fixing it would mean giving `"group"` its own history entry (real work, separate scope) — flagged
+  in `history_undo_handlers.h` for a future phase.
+
 ## Phase 15 — Cross-draft-block dangling reference (bug fix)
 
 - **Root cause, traced to `VPattern::parseDraftBlockElement()`
