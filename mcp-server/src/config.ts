@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,8 @@ export const config = {
   containerOutputDir: process.env.ACTIOND_CONTAINER_OUTPUT_DIR ?? '/data/output',
   /** Host directory under which each session gets its own subdirectory. */
   sessionsDir: process.env.MCP_SESSIONS_DIR ?? path.join(packageRoot, 'sessions'),
+  /** Where the person manually places pattern/measurement files to be loaded into a new session. */
+  uploadsDir: process.env.MCP_UPLOADS_DIR ?? path.join(packageRoot, 'uploads'),
   /** A session with no tool call against it for this long is auto-closed. */
   idleTimeoutMs: Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS ?? 30 * 60 * 1000),
   /** How long to wait for a single actiond request/response round trip before treating it as hung. */
@@ -38,6 +41,11 @@ export const config = {
   /** Default pixel width for auto-rendered snapshots after a mutating action. */
   snapshotWidth: Number(process.env.MCP_SNAPSHOT_WIDTH ?? 800),
 };
+
+/** Creates the uploads directory on startup if it doesn't already exist. */
+export async function ensureUploadsDir(): Promise<void> {
+  await mkdir(config.uploadsDir, { recursive: true });
+}
 
 export interface ActiondInvocation {
   command: string;

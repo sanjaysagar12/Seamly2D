@@ -2,8 +2,10 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { loadToolCatalog } from './catalog.js';
 import { buildServer } from './server.js';
+import { ensureUploadsDir } from './config.js';
 
 async function main(): Promise<void> {
+  await ensureUploadsDir();
   const catalog = await loadToolCatalog();
   process.stderr.write(`[seamly2d-mcp] loaded ${catalog.length} actiond tools\n`);
 

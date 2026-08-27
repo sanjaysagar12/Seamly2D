@@ -4,6 +4,13 @@ import path from 'node:path';
 import { config, buildActiondInvocation } from './config.js';
 import { ActiondProcess } from './actiondProcess.js';
 
+export interface CreateSessionOptions {
+  /** Already-resolved, already-validated absolute path to an existing pattern file. */
+  patternFilePath?: string;
+  /** Already-resolved, already-validated absolute path to an existing measurements file. */
+  measurementsFilePath?: string;
+}
+
 export interface Session {
   id: string;
   proc: ActiondProcess;
@@ -34,12 +41,25 @@ export class SessionManager {
     this.reaperHandle.unref();
   }
 
-  async createSession(): Promise<Session> {
+  async createSession(options: CreateSessionOptions = {}): Promise<Session> {
     const id = randomUUID();
     const outputDirHost = path.join(config.sessionsDir, id, 'output');
     await mkdir(outputDirHost, { recursive: true });
     const { command, args, outputDirForFlag } = buildActiondInvocation(outputDirHost);
-    const proc = new ActiondProcess(command, [...args, '--output-dir', outputDirForFlag]);
+    const actiondArgs = [...args, '--output-dir', outputDirForFlag];
+
+    // Pattern/measurements paths are already-validated absolute paths on the local filesystem
+    // (resolved by resolveUploadPath in server.ts, either against the uploads folder or as given).
+    // actiond only reads them once at startup, so passing the original location straight through
+    // is simpler than copying — no need to stage a copy inside the session's own directory.
+    if (options.patternFilePath) {
+      actiondArgs.push('--pattern', options.patternFilePath);
+    }
+    if (options.measurementsFilePath) {
+      actiondArgs.push('--measurements', options.measurementsFilePath);
+    }
+
+    const proc = new ActiondProcess(command, actiondArgs);
 
     // Smoke-test the daemon before handing the session_id back, so a broken ACTIOND_COMMAND
     // fails loudly here instead of silently hanging on the caller's first real action.

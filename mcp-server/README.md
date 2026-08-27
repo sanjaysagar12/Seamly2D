@@ -31,8 +31,13 @@ invoke `actiond`. Two shapes are supported:
 
 - **Local binary** (default if unset: `["actiond"]`, i.e. assumes it's on `PATH`):
   ```
-  ACTIOND_COMMAND=["C:/yoko/Seamly2D/build/src/app/actiond/bin/actiond.exe"]
+  ACTIOND_COMMAND=["C:/yoko/Seamly2D/out/src/app/actiond/bin/actiond.exe"]
   ```
+  `build_actiond.bat` builds into `out/`, not `build/` — point at `out/`, and re-run
+  `build_actiond.bat` after pulling action-layer changes so this binary doesn't silently fall
+  behind the action ops it's meant to expose (a stale binary here doesn't error, it just quietly
+  lacks whatever ops/parameters were added since it was last built — e.g. an old build missing
+  `piece.list`/`render.snapshot`'s `target: "piece"` support entirely).
 - **Docker image** — include the literal token `<session-dir>` inside the `-v` arg; it is
   substituted per-session with that session's own host output directory, and the server then
   appends `--output-dir <container path>` itself (default `/data/output`, override with
@@ -49,6 +54,7 @@ Other environment variables (all optional):
 | Variable | Default | Meaning |
 |---|---|---|
 | `MCP_SESSIONS_DIR` | `<this package>/sessions` | Host directory under which each session gets its own subdirectory. |
+| `MCP_UPLOADS_DIR` | `<this package>/uploads` | Folder the person drops existing pattern/measurements files into, for `pattern_new_session`'s `patternFile`/`measurementsFile` (see below). Created automatically on startup if missing. |
 | `MCP_SESSION_IDLE_TIMEOUT_MS` | `1800000` (30 min) | A session with no tool call against it for this long is auto-closed. |
 | `MCP_ACTIOND_REQUEST_TIMEOUT_MS` | `30000` | How long to wait for one actiond request/response round trip before treating it as hung. |
 | `MCP_ACTIOND_EXIT_GRACE_MS` | `5000` | Grace period after `session.close` before a still-running actiond process is SIGKILLed. |
@@ -66,9 +72,12 @@ machine, then restart Claude Desktop.
 MCP's stdio transport has no "new chat started" signal that reaches a long-lived server
 process, so session boundaries are explicit tool calls, not something the protocol infers:
 
-1. At the start of a conversation, the model calls `pattern_new_session` (no arguments), which
-   spawns a fresh `actiond` daemon subprocess against a blank pattern in its own isolated
-   directory and returns a `patternSessionId`.
+1. At the start of a conversation, the model calls `pattern_new_session`, which spawns a fresh
+   `actiond` daemon subprocess in its own isolated directory and returns a `patternSessionId`.
+   Called with no arguments it starts from a blank pattern; to start from an existing
+   `.val`/`.sm2d` pattern and/or `.smis`/`.smms`/`.vst` measurements file instead, the model
+   passes a filename or path through `patternFile`/`measurementsFile` (see below), and the
+   session starts already loaded from those files.
 2. Every other tool call takes that `patternSessionId` as a required argument.
 3. `pattern_end_session(patternSessionId)` closes the daemon when the conversation is done with its
    pattern. Sessions idle for longer than `MCP_SESSION_IDLE_TIMEOUT_MS` are auto-closed by a
@@ -94,8 +103,13 @@ concept from the Streamable HTTP transport, even over stdio where that concept d
   --format=ai` reports, plus a required `patternSessionId`. On success, any op outside the catalogue's
   `introspection` category (plus `session.close`/`session.save`) also returns a rendered PNG
   snapshot of the draft alongside the JSON result, batched into the same request as the action
-  itself.
-- `pattern_new_session` / `pattern_end_session` — see above.
+  itself. If the op's own arguments name an existing piece (`piece.addAnchorPoint`, `piece.internalPath`,
+  `piece.insertNodes`) or create one (`piece.addPatternPiece`), a second close-up
+  `render.snapshot(target: "piece")` of that specific piece is batched in too.
+- `pattern_new_session(patternFile?, measurementsFile?)` / `pattern_end_session` — see above. Both
+  new-session parameters are optional; give neither for a blank pattern, or give a filename
+  (resolved against the uploads folder, see below) or full path to start already loaded from an
+  existing pattern and/or measurements file.
 - `pattern_download_snapshot(patternSessionId, step?)` — re-fetch a snapshot already rendered this
   session (most recent by default).
 - `pattern_download_val(patternSessionId)` — saves and returns the live pattern as a `.val` file.
@@ -107,6 +121,12 @@ concept from the Streamable HTTP transport, even over stdio where that concept d
   calls `measurements.sync` (load + recompute in one step). The raw `measurements_load` /
   `measurements_recompute` / `measurements_sync` tools (auto-generated, taking a file `path`)
   are also available for a person supplying an actual measurement file.
+- `pattern_snapshot_pieces(patternSessionId)` — renders one close-up `render.snapshot(target:
+  "piece")` per pattern piece (garment piece — Front, Back, Sleeve, etc; what a person often calls
+  a "layer"), instead of a single whole-draft view where every piece overlaps in the same frame.
+  Calls `piece.list` internally to discover pieces first. Falls back to one whole-draft snapshot
+  (with a note) if the pattern has no pieces yet. Use this whenever asked to see "each piece" /
+  "each layer" of a pattern that may contain more than one.
 
 Binary files (`.val`, `.dxf`) come back as an embedded `resource` content block (base64 `blob`)
 plus the absolute host filesystem path as text, so they're usable even in a client that doesn't
@@ -120,8 +140,9 @@ A session started fresh (no `.val` loaded) has its measurement type internally s
 a `measurementTypeMismatch` error (`expected: "unknown"`) — this is `actiond`'s own behavior,
 verified directly against the daemon outside this wrapper, not something introduced by this MCP
 server. Loading measurements successfully today requires starting from a pattern file that
-already establishes a measurement type. Worth revisiting once/if the action layer adds a way to
-set a blank pattern's measurement type explicitly.
+already establishes a measurement type — pass one via `pattern_new_session`'s `patternFile`. Worth
+revisiting once/if the action layer adds a way to set a blank pattern's measurement type
+explicitly.
 
 ## Worked example conversation
 
@@ -139,6 +160,43 @@ set a blank pattern's measurement type explicitly.
 >
 > **Claude:** *(calls `pattern_export_dxf` with the session's `patternSessionId`)* → returns the
 > `.dxf` file.
+
+## Starting from an existing pattern or measurements file
+
+`pattern_new_session` reads pattern/measurements files directly off the local filesystem — the
+model only ever passes a filename or path string, never file contents. This works because
+`mcp-server` runs as a local child process on the same machine as the MCP client (spawned via
+`claude_desktop_config.json`'s `command`/`args`, communicating over stdio); it already has full
+local filesystem access, so there's no need to round-trip an entire file's text through the model
+just to get it into a tool call.
+
+A bare filename (e.g. `"Aldrich.sm2d"`) is resolved against the uploads folder
+(`MCP_UPLOADS_DIR`, default `<this package>/uploads`, created automatically on startup). A full
+path (e.g. `"C:\Users\name\patterns\x.val"`) is used as-is. To use an existing file, drop it into
+the uploads folder (or note its full path) and tell Claude the filename.
+
+**Trust boundary:** this MCP server is a local, single-user tool. Whoever can talk to this stdio
+process is, by construction, the same person running the MCP client on this machine, so resolving
+an arbitrary absolute path the model provides is a deliberate design choice, not an oversight —
+this is not a multi-tenant or network-exposed service.
+
+**Docker mode caveat:** when `ACTIOND_COMMAND` runs `actiond` inside a container (see above),
+only the session's own output directory is bind-mounted in. A pattern/measurements path outside
+that directory — including anything in the uploads folder — won't be visible to the containerized
+process. This path-based loading is intended for local-binary mode; docker-mode users should mount
+the uploads folder into the container themselves (adding another `-v` entry to `ACTIOND_COMMAND`)
+if they need this feature.
+
+### Worked example
+
+> **User:** I've placed `AldrichWomens6thEdBasicBlocks.sm2d` and `aldrich_women_template.smis` in
+> the uploads folder — start a session using them, then show me a snapshot.
+>
+> **Claude:** *(calls `pattern_new_session` with `patternFile: "AldrichWomens6thEdBasicBlocks.sm2d"`
+> and `measurementsFile: "aldrich_women_template.smis"`)* → gets a `patternSessionId` for a session
+> already loaded from those files.
+> *(calls `render.snapshot` with that `patternSessionId`)* → returns a PNG of the actual loaded
+> pattern, not a blank draft.
 
 ## Development
 

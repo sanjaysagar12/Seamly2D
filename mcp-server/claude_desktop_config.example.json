@@ -4,7 +4,7 @@
       "command": "node",
       "args": ["C:/yoko/Seamly2D/mcp-server/dist/index.js"],
       "env": {
-        "ACTIOND_COMMAND": "[\"C:/yoko/Seamly2D/build/src/app/actiond/bin/actiond.exe\"]"
+        "ACTIOND_COMMAND": "[\"C:/yoko/Seamly2D/out/src/app/actiond/bin/actiond.exe\"]"
       }
     },
     "seamly2d-docker": {
